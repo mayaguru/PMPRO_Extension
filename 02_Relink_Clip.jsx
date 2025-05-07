@@ -55,7 +55,7 @@
             }
         }
         
-        // 프로젝트에서 클립 찾기
+        // 프로젝트에서 클립 찾기 (개선된 버전)
         function findClipsInProject() {
             var result = {
                 allClips: [],
@@ -63,34 +63,49 @@
                 offlineClips: []
             };
             
+            // selection 객체 디버깅
+            log("Selection 객체 확인: " + (app.project.selection ? "존재함" : "존재하지 않음"));
+            if (app.project.selection) {
+                log("선택된 항목 수: " + app.project.selection.length);
+                for (var i = 0; i < app.project.selection.length; i++) {
+                    var sel = app.project.selection[i];
+                    log("선택 항목 #" + i + ": " + 
+                        (sel.name ? sel.name : "이름 없음") + 
+                        (sel.type ? " (Type: " + sel.type + ")" : " (Type 없음)"));
+                }
+            }
+            
             // 재귀적으로 프로젝트 아이템 탐색
             function scanProjectItem(item) {
                 try {
-                    // 선택된 항목인지 확인
-                    var isSelected = false;
-                    if (app.project.selection && app.project.selection.length > 0) {
-                        for (var i = 0; i < app.project.selection.length; i++) {
-                            if (app.project.selection[i] === item) {
-                                isSelected = true;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // 클립인지 확인 (형식 없이 간단하게)
-                    if (item.type && item.type.toString() === "1") { // ProjectItemType.CLIP
+                    // 클립인지 확인 (type == 1이 클립임)
+                    if (item.type && item.type.toString() === "1") {
                         // 배열에 추가
                         result.allClips.push(item);
+                        log("클립 발견: " + item.name);
+                        
+                        // 선택된 항목인지 확인
+                        var isSelected = false;
+                        if (app.project.selection && app.project.selection.length > 0) {
+                            for (var i = 0; i < app.project.selection.length; i++) {
+                                if (app.project.selection[i] === item) {
+                                    isSelected = true;
+                                    break;
+                                }
+                            }
+                        }
                         
                         // 선택된 항목이면 선택 배열에 추가
                         if (isSelected) {
                             result.selectedClips.push(item);
+                            log("선택된 클립: " + item.name);
                         }
                         
                         // 오프라인 확인
                         try {
                             if (item.isOffline && item.isOffline()) {
                                 result.offlineClips.push(item);
+                                log("오프라인 클립 발견: " + item.name);
                             }
                         } catch (e) {
                             log("오프라인 상태 확인 오류: " + e.message);
@@ -110,7 +125,11 @@
             
             // 루트 아이템부터 시작
             if (app.project.rootItem) {
+                log("루트 아이템 스캔 시작");
                 scanProjectItem(app.project.rootItem);
+                log("루트 아이템 스캔 완료");
+            } else {
+                log("루트 아이템이 없음");
             }
             
             return result;
@@ -138,28 +157,41 @@
             // 선택된 클립이 있으면 첫 번째 사용
             itemToProcess = projectClips.selectedClips[0];
             log("선택된 클립 사용: " + itemToProcess.name);
+            // 알림 메시지 제거 (잘 작동하므로 필요 없음)
         } else if (projectClips.offlineClips.length > 0) {
             // 선택된 클립이 없지만 오프라인 클립이 있으면 첫 번째 사용
             itemToProcess = projectClips.offlineClips[0];
             log("오프라인 클립 사용: " + itemToProcess.name);
             
             // 사용자에게 알림
-            alert("선택된 클립이 없습니다. 오프라인 클립 '" + itemToProcess.name + "'을(를) 사용합니다.");
+            alert("오프라인 클립 '" + itemToProcess.name + "'을(를) 사용합니다.");
         } else if (projectClips.allClips.length > 0) {
             // 선택된 클립도 없고 오프라인 클립도 없지만 일반 클립이 있으면 사용자에게 선택 요청
-            alert("선택된 클립이나 오프라인 클립이 없습니다. 프로젝트 패널에서 리링크할 클립을 선택한 후 '확인'을 클릭하세요.");
+            alert("프로젝트 패널에서 리링크할 클립을 선택한 후 '확인'을 클릭하세요.");
             
             // 사용자가 선택할 시간 제공 후 다시 확인
-            if (app.project.selection && app.project.selection.length > 0) {
-                itemToProcess = app.project.selection[0];
+            app.setSelectionToBottom();  // 스크립트 UI 닫기
+            
+            // 선택이 완료되기를 기다림 (짧은 지연 후)
+            $.sleep(1000);  // 1초 대기
+            
+            // 다시 선택 확인
+            var newProjectClips = findClipsInProject();
+            if (newProjectClips.selectedClips.length > 0) {
+                itemToProcess = newProjectClips.selectedClips[0];
                 log("사용자 선택 후 클립: " + itemToProcess.name);
             } else {
-                alert("선택된 클립이 없습니다. 스크립트를 종료합니다.");
+                alert("클립을 선택하지 않았습니다. 스크립트를 종료합니다.");
                 return;
             }
         } else {
             // 클립이 아예 없음
             alert("프로젝트에 클립이 없습니다. 스크립트를 종료합니다.");
+            return;
+        }
+        
+        if (!itemToProcess) {
+            alert("처리할 클립을 찾을 수 없습니다. 클립을 직접 선택한 후 다시 시도하세요.");
             return;
         }
         
@@ -177,7 +209,10 @@
     } catch (e) {
         alert("스크립트 오류: " + e.message);
         log("치명적 오류: " + e.message);
+        
+        // 스택 트레이스가 있으면 표시
+        if (e.stack) {
+            log("스택 트레이스: " + e.stack);
+        }
     }
 })();
-
-
