@@ -63,11 +63,25 @@
             return;
         }
         app.encoder.launchEncoder();
-        // use workarea; remove from queue upon success
+        
+        // 0: Entire, 1: In/Out, 2: WorkArea
+        // User wants In/Out points
+        var rangeToEncode = 1; 
+        if (app.encoder.ENCODE_IN_TO_OUT !== undefined) {
+            rangeToEncode = app.encoder.ENCODE_IN_TO_OUT;
+        }
+
+        // remove from queue upon success
         var removeFromQueueUponSuccess = 1;
-        var jobID = app.encoder.encodeSequence(seq, outPath, presetFile.fsName, app.encoder.ENCODE_WORKAREA, removeFromQueueUponSuccess);
-        $.writeln("Render job queued: " + jobID + " -> " + outPath);
-        alert("Queued render in AME:\n" + outPath + "\nPreset:\n" + presetPath);
+        
+        var jobID = app.encoder.encodeSequence(seq, outPath, presetFile.fsName, rangeToEncode, removeFromQueueUponSuccess);
+        
+        if (jobID) {
+            $.writeln("Render job queued: " + jobID + " -> " + outPath);
+            alert("Queued render in AME (In/Out):\n" + outPath + "\nPreset:\n" + presetFile.name + "\nJob ID: " + jobID);
+        } else {
+            alert("Failed to queue render. AME might not be responding or arguments are invalid.");
+        }
     }catch(e){
         alert("Render failed: " + e + "\nLine: " + (e.line||"?"));
     }
