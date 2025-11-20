@@ -16,12 +16,16 @@
 	font-family: "LucidaGrande", sans-serif;
 }
 
+body {
+	color: #b0b0b0; /* darker gray to match Premiere UI */
+}
+
 p {
 	text-align:center;
 }
 
 a {
-        color: #8080ff;
+        color: #7c8cff;
 }
 
 button

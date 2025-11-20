@@ -30,6 +30,42 @@
 			// handlers, instead of directly invoking ExtendScript .This gives the JavaScript layer a chance
 			// to pass data into the ExtendScript layer, and process the results.
 
+			function runAmazeScript(fileName) {
+				var csInterface = new CSInterface();
+				var osVersion = csInterface.getOSInformation();
+				var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+				var isWin = osVersion && osVersion.indexOf("Windows") >= 0;
+				var sep = isWin ? '\\\\' : '/';
+
+				if (isWin) {
+					extRoot = extRoot.replace(/\//g, '\\\\');
+				}
+
+				var fullPath = extRoot + sep + 'jsx' + sep + 'custom' + sep + fileName;
+				var call = '$.evalFile(\"' + fullPath + '\")';
+				csInterface.evalScript(call);
+			}
+
+			$("#run_CreateDefFolders").on("click", function (e) {
+				e.preventDefault();
+				runAmazeScript("01_Create_Def_folders.jsx");
+			});
+
+			$("#run_SetInOutByMarkers").on("click", function (e) {
+				e.preventDefault();
+				runAmazeScript("03_Set_InOut_By_Markers.jsx");
+			});
+
+			$("#run_CalMarkDuration").on("click", function (e) {
+				e.preventDefault();
+				runAmazeScript("04_Cal_Mark_Duration.jsx");
+			});
+
+			$("#run_BuildTestScene").on("click", function (e) {
+				e.preventDefault();
+				runAmazeScript("07_BuildTestScene.jsx");
+			});
+
 			$("#copypresets").on("click", function (e) {
 				e.preventDefault();
 
@@ -360,6 +396,14 @@
 	<p id="version_string">[uninitialized]</p>
 	<p id="active_seq">[uninitialized]</p>
 	<p id="proxies_on">Proxies enabled for sequence: </p>
+
+	<div>
+		<h2>Amaze scripts</h2>
+		<button class="controlBg textStyle" id="run_CreateDefFolders">Create default folders</button>
+		<button class="controlBg textStyle" id="run_SetInOutByMarkers">Set In/Out by markers</button>
+		<button class="controlBg textStyle" id="run_CalMarkDuration">Calc marker duration</button>
+		<button class="controlBg textStyle" id="run_BuildTestScene">Build test scene</button>
+	</div>
 
 	<div>
 		<h2>New in 23.0!</h2>
