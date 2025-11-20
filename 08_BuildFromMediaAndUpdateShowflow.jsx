@@ -236,36 +236,16 @@ try {
 
     $.writeln("Show ID: " + showId);
 
-    // Check if project is saved
-    if (!app.project.path) {
-        alert("ERROR: Project not saved!\n\nPlease save the project first.");
-        throw new Error("Project not saved");
+    // Select JSON file (no auto-search)
+    $.writeln("Opening JSON file dialog...");
+    var jsonFile = File.openDialog("Select showflow JSON file for: " + showId, "JSON:*.json");
+
+    if (!jsonFile) {
+        alert("ERROR: No JSON file selected!");
+        throw new Error("No JSON");
     }
 
-    // Look for JSON
-    var projFile = new File(app.project.path);
-    var jsonPath1 = projFile.path + "/" + showId + ".showflow.json";
-    var jsonPath2 = "P:/99-Pipeline/PremiereScripts/Scripts/flow/" + showId + ".showflow.json";
-
-    var f1 = new File(jsonPath1);
-    var f2 = new File(jsonPath2);
-
-    var jsonFile = null;
-
-    if (f1.exists) {
-        jsonFile = f1;
-        $.writeln("Found JSON: " + jsonPath1);
-    } else if (f2.exists) {
-        jsonFile = f2;
-        $.writeln("Found JSON: " + jsonPath2);
-    } else {
-        alert("JSON not found!\n\nPlease select manually...");
-        jsonFile = File.openDialog("Select showflow JSON", "JSON:*.json");
-        if (!jsonFile) {
-            alert("ERROR: No JSON file selected!");
-            throw new Error("No JSON");
-        }
-    }
+    $.writeln("Selected JSON: " + jsonFile.fsName);
 
     // Read JSON
     jsonFile.encoding = "UTF-8";
@@ -291,16 +271,13 @@ try {
 
     $.writeln("JSON loaded - Slots: " + showflowData.slots.length);
 
-    // Get media folder
-    var mediaFolder = new Folder(DEFAULT_MEDIA_DIR);
+    // Select media folder (no auto-search)
+    $.writeln("Opening media folder dialog...");
+    var mediaFolder = Folder.selectDialog("Select media folder for: " + showId);
 
-    if (!mediaFolder.exists) {
-        alert("Default media folder not found:\n" + DEFAULT_MEDIA_DIR + "\n\nPlease select media folder...");
-        mediaFolder = Folder.selectDialog("Select media folder");
-        if (!mediaFolder) {
-            alert("ERROR: No media folder selected!");
-            throw new Error("No media folder");
-        }
+    if (!mediaFolder) {
+        alert("ERROR: No media folder selected!");
+        throw new Error("No media folder");
     }
 
     $.writeln("Media folder: " + mediaFolder.fsName);
