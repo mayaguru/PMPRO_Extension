@@ -1,0 +1,143 @@
+/**
+ * Simple File Logger for ExtendScript
+ * 사용법:
+ *   #include "Logger.jsxinc"
+ *   var logger = new FileLogger("MyScript");
+ *   logger.log("테스트 메시지");
+ *   logger.error("에러 발생!");
+ *   logger.save(); // 파일로 저장
+ */
+
+function FileLogger(scriptName) {
+    this.scriptName = scriptName || "Script";
+    this.messages = [];
+    this.startTime = new Date();
+    
+    // 로그 파일 경로 (바탕화면)
+    this.logFolder = new Folder(Folder.desktop + "/PremiereScriptLogs");
+    if (!this.logFolder.exists) {
+        this.logFolder.create();
+    }
+    
+    // 로그 시작
+    this.log("=== " + this.scriptName + " 시작 ===");
+    this.log("시간: " + this.startTime.toString());
+}
+
+FileLogger.prototype.log = function(message) {
+    var timestamp = this._getElapsedTime();
+    var line = "[" + timestamp + "] " + message;
+    this.messages.push(line);
+    $.writeln(line); // 콘솔에도 출력
+    return line;
+};
+
+FileLogger.prototype.error = function(message) {
+    return this.log("❌ ERROR: " + message);
+};
+
+FileLogger.prototype.warn = function(message) {
+    return this.log("⚠️ WARN: " + message);
+};
+
+FileLogger.prototype.info = function(message) {
+    return this.log("ℹ️ INFO: " + message);
+};
+
+FileLogger.prototype.success = function(message) {
+    return this.log("✓ SUCCESS: " + message);
+};
+
+FileLogger.prototype._getElapsedTime = function() {
+    var now = new Date();
+    var elapsed = now.getTime() - this.startTime.getTime();
+    var seconds = Math.floor(elapsed / 1000);
+    var ms = elapsed % 1000;
+    return seconds + "." + this._pad(Math.floor(ms / 100), 1) + "s";
+};
+
+FileLogger.prototype._pad = function(num, size) {
+    var s = num + "";
+    while (s.length < size) s = "0" + s;
+    return s;
+};
+
+FileLogger.prototype.save = function() {
+    try {
+        // 파일명: ScriptName_YYYYMMDD_HHMMSS.log
+        var now = new Date();
+        var filename = this.scriptName.replace(/[^a-zA-Z0-9]/g, "_") + "_" +
+            now.getFullYear() +
+            this._pad(now.getMonth() + 1, 2) +
+            this._pad(now.getDate(), 2) + "_" +
+            this._pad(now.getHours(), 2) +
+            this._pad(now.getMinutes(), 2) +
+            this._pad(now.getSeconds(), 2) + ".log";
+        
+        var logFile = new File(this.logFolder.fsName + "/" + filename);
+        
+        logFile.encoding = "UTF-8";
+        if (logFile.open("w")) {
+            logFile.write(this.messages.join("\n"));
+            logFile.close();
+            
+            this.log("로그 저장 완료: " + logFile.fsName);
+            return logFile.fsName;
+        } else {
+            $.writeln("로그 파일 생성 실패!");
+            return null;
+        }
+    } catch (e) {
+        $.writeln("로그 저장 중 오류: " + e);
+        return null;
+    }
+};
+
+FileLogger.prototype.saveAndShow = function() {
+    var path = this.save();
+    if (path) {
+        var msg = "로그가 저장되었습니다!\n\n" + path + "\n\n파일을 여시겠습니까?";
+        if (confirm(msg)) {
+            var logFile = new File(path);
+            logFile.execute();
+        }
+    }
+    return path;
+};
+
+FileLogger.prototype.getLog = function() {
+    return this.messages.join("\n");
+};
+
+// 간단한 사용을 위한 글로벌 헬퍼
+var _globalLogger = null;
+
+function initLogger(scriptName) {
+    _globalLogger = new FileLogger(scriptName);
+    return _globalLogger;
+}
+
+function log(message) {
+    if (!_globalLogger) _globalLogger = new FileLogger("UnnamedScript");
+    return _globalLogger.log(message);
+}
+
+function logError(message) {
+    if (!_globalLogger) _globalLogger = new FileLogger("UnnamedScript");
+    return _globalLogger.error(message);
+}
+
+function logSuccess(message) {
+    if (!_globalLogger) _globalLogger = new FileLogger("UnnamedScript");
+    return _globalLogger.success(message);
+}
+
+function saveLog() {
+    if (_globalLogger) return _globalLogger.save();
+    return null;
+}
+
+function saveLogAndShow() {
+    if (_globalLogger) return _globalLogger.saveAndShow();
+    return null;
+}
