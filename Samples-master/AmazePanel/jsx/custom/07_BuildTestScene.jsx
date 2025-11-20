@@ -186,25 +186,70 @@
         return null;
     }
 
-    function loadShowFlow(showId) {
-        if (!app.project.path) return { error: "Project must be saved to load showflow JSON." };
-        var projFile = new File(app.project.path);
-        var candidate = [
-            projFile.path + "/" + showId + ".showflow.json",
-            "P:/99-Pipeline/PremiereScripts/Scripts/flow/" + showId + ".showflow.json"
-        ];
-        var f = null;
-        var jsonPath = "";
-        for (var i = 0; i < candidate.length; i++) {
-            var c = new File(candidate[i]);
-            if (c.exists) { f = c; jsonPath = c.fsName || c.fullName; break; }
+    function loadFlowConfigDefault(showId) {
+        var paths = [];
+        // 1) flow_config.json (panel에서 저장한 경로) - 확장 루트 기준
+        try {
+            var scriptFile = new File($.fileName);          // .../jsx/custom/07_BuildTestScene.jsx
+            var panelRoot = scriptFile.parent.parent.parent; // -> .../AmazePanel
+            if (panelRoot) {
+                var cfg = new File(panelRoot.fullName + "/flow_config.json");
+                if (cfg.exists) {
+                    cfg.encoding = "UTF-8";
+                    if (cfg.open("r")) {
+                        var txt = cfg.read();
+                        cfg.close();
+                        var obj;
+                        try { obj = JSON.parse(txt); } catch (eJSON) { obj = null; }
+                        if (obj && obj.flowPath) {
+                            var f = new File(obj.flowPath);
+                            if (f.exists) return { file: f, path: f.fsName || f.fullName };
+                        }
+                    }
+                }
+            }
+        } catch (e) { }
+        // fallback candidates
+        if (app.project && app.project.path) {
+            var projFile = new File(app.project.path);
+            paths.push(projFile.path + "/" + showId + ".showflow.json");
         }
+        paths.push("P:/99-Pipeline/PremiereScripts/Scripts/flow/" + showId + ".showflow.json");
+        paths.push("D:/_DEV/PremiereScripts/Scripts/flow/" + showId + ".showflow.JSON");
+        for (var i = 0; i < paths.length; i++) {
+            var c = new File(paths[i]);
+            if (c.exists) return { file: c, path: c.fsName || c.fullName };
+        }
+        return null;
+    }
+
+    function loadShowFlow(showId) {
+        // 1) flow_config.json 우선
+        var fInfo = loadFlowConfigDefault(showId);
+        var f = fInfo ? fInfo.file : null;
+        var jsonPath = fInfo ? fInfo.path : "";
+
+        // 2) fallback: 프로젝트/기본 경로
+        if (!f && app.project && app.project.path) {
+            var projFile = new File(app.project.path);
+            var candidate = [
+                projFile.path + "/" + showId + ".showflow.json",
+                "P:/99-Pipeline/PremiereScripts/Scripts/flow/" + showId + ".showflow.json",
+                "D:/_DEV/PremiereScripts/Scripts/flow/" + showId + ".showflow.JSON"
+            ];
+            for (var i = 0; i < candidate.length; i++) {
+                var c = new File(candidate[i]);
+                if (c.exists) { f = c; jsonPath = c.fsName || c.fullName; break; }
+            }
+        }
+
+        // 3) 마지막: 파일 직접 선택
         if (!f) {
-            // fallback: manual select
             f = File.openDialog("Select showflow JSON", "JSON:*.json");
             if (!f) return { error: "Showflow JSON not found; selection cancelled." };
             jsonPath = f.fsName || f.fullName;
         }
+
         f.encoding = "UTF-8";
         if (!f.open("r")) return { error: "Cannot open " + jsonPath };
         var txt = f.read();

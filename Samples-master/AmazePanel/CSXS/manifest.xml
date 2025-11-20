@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="5.0" ExtensionBundleId="com.adobe.AmazePanel" ExtensionBundleVersion="11.1"
+<ExtensionManifest Version="5.0" ExtensionBundleId="com.adobe.AmazePanel" ExtensionBundleVersion="99.0.0"
 ExtensionBundleName="Amaze Panel"
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 	<ExtensionList>
-		<Extension Id="com.adobe.AmazePanel" Version="10.3.0" />
+		<Extension Id="com.adobe.AmazePanel" Version="99.0.0" />
 	</ExtensionList>
 	<ExecutionEnvironment>
 		<HostList>

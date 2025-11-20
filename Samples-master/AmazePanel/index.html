@@ -32,18 +32,37 @@
 
 			function runAmazeScript(fileName) {
 				var csInterface = new CSInterface();
-				var osVersion = csInterface.getOSInformation();
-				var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
-				var isWin = osVersion && osVersion.indexOf("Windows") >= 0;
-				var sep = isWin ? '\\\\' : '/';
+				var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION); // returns forward slashes
+				var fullPath = extRoot + "/jsx/custom/" + fileName; // forward slashes are fine
 
-				if (isWin) {
-					extRoot = extRoot.replace(/\//g, '\\\\');
-				}
+				// Build safe evalFile call with error capture
+				var escaped = fullPath.replace(/\\/g, "\\\\").replace(/\"/g, "\\\"");
+				var jsxCall = '(function(){ ' +
+					'try { ' +
+					'  var f = new File("' + escaped + '"); ' +
+					'  var info = "path=" + f.fsName + " exists=" + f.exists; ' +
+					'  if (!f.exists) { return "ERR: missing file -> " + info; } ' +
+					'  var res; ' +
+					'  try { res = $.evalFile(f); } catch(evalErr) { ' +
+					'    var msg1 = (evalErr && evalErr.toString) ? evalErr.toString() : evalErr; ' +
+					'    var ln1 = (evalErr && evalErr.line) ? evalErr.line : "?"; ' +
+					'    return "ERR-EVAL: " + msg1 + " line=" + ln1 + " info=" + info; ' +
+					'  } ' +
+					'  return "ok: " + info + " res=" + res; ' +
+					'} catch(e) { ' +
+					'  var msg = (e && e.toString) ? e.toString() : e; ' +
+					'  var ln = (e && e.line) ? e.line : "?"; ' +
+					'  return "ERR: " + msg + " line=" + ln + " info=' + escaped + '"; ' +
+					'}' +
+					'})()';
 
-				var fullPath = extRoot + sep + 'jsx' + sep + 'custom' + sep + fileName;
-				var call = '$.evalFile(\"' + fullPath + '\")';
-				csInterface.evalScript(call);
+				// Debug: show what we are launching, then run and report result
+				alert("Launching script:\n" + fileName + "\n" + fullPath);
+				csInterface.evalScript(jsxCall, function (res) {
+					if (res && res.indexOf("ERR:") === 0) {
+						alert("Script error:\n" + res);
+					}
+				});
 			}
 
 			$("#run_CreateDefFolders").on("click", function (e) {
@@ -65,6 +84,136 @@
 				e.preventDefault();
 				runAmazeScript("07_BuildTestScene.jsx");
 			});
+
+			$("#run_BuildFromMedia").on("click", function (e) {
+				e.preventDefault();
+				runAmazeScript("08_BuildFromMediaAndUpdateShowflow.jsx");
+			});
+
+			$("#run_UpdateShowflowTemp").on("click", function (e) {
+				e.preventDefault();
+				runAmazeScript("09_UpdateShowflow_temp.jsx");
+			});
+
+			$("#run_RenderSelected").on("click", function (e) {
+				e.preventDefault();
+				runAmazeScript("10_RenderSelected.jsx");
+			});
+
+				// ----- Flow JSON selector (panel layer) -----
+				var CONFIG_FILE = "flow_config.json";
+				var flowPathEl = $("#flowPath");
+				var mediaPathEl = $("#mediaPath");
+				var renderPresetEl = $("#renderPresetPath");
+				var renderOutputEl = $("#renderOutputPath");
+
+			function configPath() {
+				var csInterface = new CSInterface();
+				var osVersion = csInterface.getOSInformation();
+				var isWin = osVersion && osVersion.indexOf("Windows") >= 0;
+				var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+				if (isWin) extRoot = extRoot.replace(/\//g, "\\\\");
+				var sep = isWin ? "\\\\" : "/";
+				return extRoot + sep + CONFIG_FILE;
+			}
+
+				function loadFlowConfig() {
+					var path = configPath();
+					var parsed = { flowPath: "", mediaDir: "", renderPreset: "", renderOutput: "" };
+					var res = window.cep.fs.readFile(path);
+					if (res.err === 0 && res.data) {
+						try {
+							var raw = JSON.parse(res.data);
+							if (raw) parsed = raw;
+						} catch (e) { }
+					}
+					flowPathEl.text(parsed.flowPath || "[not set]");
+					mediaPathEl.text(parsed.mediaDir || "[not set]");
+					renderPresetEl.text(parsed.renderPreset || "[not set]");
+					renderOutputEl.text(parsed.renderOutput || "[not set]");
+					return parsed;
+				}
+
+				function saveFlowConfig(cfg) {
+					var path = configPath();
+					var payload = JSON.stringify(cfg || {}, null, 2);
+					window.cep.fs.writeFile(path, payload);
+					loadFlowConfig(); // refresh display
+				}
+
+			$("#pickFlow").on("click", function (e) {
+				e.preventDefault();
+				var csInterface = new CSInterface();
+					var startFolder = csInterface.getSystemPath(SystemPath.EXTENSION);
+					var dlg = window.cep.fs.showOpenDialog(false, false, "Select showflow JSON", startFolder, ["json"]);
+					if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+						// preserve media dir if already set
+						var current = loadFlowConfig() || {};
+						current.flowPath = dlg.data[0];
+						saveFlowConfig(current);
+					}
+				});
+
+				$("#clearFlow").on("click", function (e) {
+					e.preventDefault();
+					var current = loadFlowConfig() || {};
+					current.flowPath = "";
+					saveFlowConfig(current);
+				});
+
+				$("#pickMedia").on("click", function (e) {
+					e.preventDefault();
+					var dlg = window.cep.fs.showOpenDialog(false, true, "Select media folder", "", []);
+					if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+						var current = loadFlowConfig() || {};
+						current.mediaDir = dlg.data[0];
+						saveFlowConfig(current);
+					}
+				});
+
+				$("#clearMedia").on("click", function (e) {
+					e.preventDefault();
+					var current = loadFlowConfig() || {};
+					current.mediaDir = "";
+					saveFlowConfig(current);
+				});
+
+				$("#pickRenderPreset").on("click", function (e) {
+					e.preventDefault();
+					var dlg = window.cep.fs.showOpenDialog(false, false, "Select AME preset (.epr)", "", ["epr"]);
+					if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+						var current = loadFlowConfig() || {};
+						current.renderPreset = dlg.data[0];
+						saveFlowConfig(current);
+					}
+				});
+
+				$("#clearRenderPreset").on("click", function (e) {
+					e.preventDefault();
+					var current = loadFlowConfig() || {};
+					current.renderPreset = "";
+					saveFlowConfig(current);
+				});
+
+				$("#pickRenderOutput").on("click", function (e) {
+					e.preventDefault();
+					var dlg = window.cep.fs.showOpenDialog(false, true, "Select render output folder", "", []);
+					if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+						var current = loadFlowConfig() || {};
+						current.renderOutput = dlg.data[0];
+						saveFlowConfig(current);
+					}
+				});
+
+				$("#clearRenderOutput").on("click", function (e) {
+					e.preventDefault();
+					var current = loadFlowConfig() || {};
+					current.renderOutput = "";
+					saveFlowConfig(current);
+				});
+
+			// init flow display
+			loadFlowConfig();
 
 			$("#copypresets").on("click", function (e) {
 				e.preventDefault();
@@ -397,12 +546,39 @@
 	<p id="active_seq">[uninitialized]</p>
 	<p id="proxies_on">Proxies enabled for sequence: </p>
 
-	<div>
+	<div class="group">
 		<h2>Amaze scripts</h2>
 		<button class="controlBg textStyle" id="run_CreateDefFolders">Create default folders</button>
 		<button class="controlBg textStyle" id="run_SetInOutByMarkers">Set In/Out by markers</button>
 		<button class="controlBg textStyle" id="run_CalMarkDuration">Calc marker duration</button>
 		<button class="controlBg textStyle" id="run_BuildTestScene">Build test scene</button>
+		<button class="controlBg textStyle" id="run_BuildFromMedia">Build from media & update showflow</button>
+		<button class="controlBg textStyle" id="run_UpdateShowflowTemp">Update showflow (temp)</button>
+	</div>
+
+	<div class="group">
+		<h2>Flow file</h2>
+		<p id="flowPath">[not set]</p>
+		<button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
+		<button class="controlBg textStyle" id="clearFlow">Clear</button>
+	</div>
+
+	<div class="group">
+		<h2>Media folder</h2>
+		<p id="mediaPath">[not set]</p>
+		<button class="controlBg textStyle" id="pickMedia">Pick media folder</button>
+		<button class="controlBg textStyle" id="clearMedia">Clear</button>
+	</div>
+
+	<div class="group">
+		<h2>Render</h2>
+		<p>Preset: <span id="renderPresetPath">[not set]</span></p>
+		<button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
+		<button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
+		<p>Output folder: <span id="renderOutputPath">[not set]</span></p>
+		<button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
+		<button class="controlBg textStyle" id="clearRenderOutput">Clear output</button>
+		<button class="controlBg textStyle" id="run_RenderSelected">Render active sequence</button>
 	</div>
 
 	<div>
