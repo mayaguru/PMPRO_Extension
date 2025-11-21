@@ -706,7 +706,7 @@
             root.appendChild(ruler);
 
             // Create tracks (reversed order - bottom to top)
-            sortedTracks.reverse().forEach(function (trKey) {
+            sortedTracks.forEach(function (trKey) {
                 var trackRow = document.createElement("div");
                 trackRow.className = "track-row";
 
