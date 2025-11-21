@@ -249,6 +249,10 @@
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
             pointer-events: none;
             line-height: 1.25;
+            background: rgba(26, 26, 26, 0.85);
+            padding: 4px 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
         }
 
         .marker-label .marker-time {
@@ -1773,30 +1777,59 @@
                 markerItems.push({ x: m * pixelsPerFrame, pin: pin, lbl: lbl, color: branch ? "#ff7b7b" : "#ffb347", warn: warn });
             });
 
-            // Stagger vertically when markers are crowded
-            var minGapPx = 70;
-            var rowOffsets = [18, 40, 62]; // label top positions (bigger vertical offsets)
-            var lastX = -Infinity;
-            var lastRow = 0;
-            markerItems.forEach(function (item, i) {
-                var row = 0;
-                if (i > 0 && (item.x - lastX) < minGapPx) {
-                    row = (lastRow + 1) % rowOffsets.length;
+            // Smart stagger: try combinations of rows + horizontal offsets to avoid overlaps
+            var rowOffsets = [36, 90, 144];
+            var horizontalOffsets = [-30, 0, 30];
+            var labelPadding = 8;
+            var rows = [];
+            for (var r = 0; r < rowOffsets.length; r++) {
+                rows[r] = -Infinity;
+            }
+
+            var tempContainer = document.createElement("div");
+            tempContainer.style.position = "absolute";
+            tempContainer.style.visibility = "hidden";
+            markerBar.appendChild(tempContainer);
+
+            markerItems.forEach(function (item) {
+                tempContainer.innerHTML = "";
+                tempContainer.appendChild(item.lbl.cloneNode(true));
+                var labelWidth = tempContainer.getBoundingClientRect().width || 80;
+
+                var bestRow = 0;
+                var bestHOffset = 0;
+                var placed = false;
+
+                for (var r = 0; r < rowOffsets.length; r++) {
+                    for (var h = 0; h < horizontalOffsets.length; h++) {
+                        var labelLeft = item.x + horizontalOffsets[h] - (labelWidth / 2);
+                        var labelRight = labelLeft + labelWidth;
+                        if (rows[r] + labelPadding <= labelLeft) {
+                            bestRow = r;
+                            bestHOffset = horizontalOffsets[h];
+                            rows[r] = labelRight;
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if (placed) break;
                 }
-                lastX = item.x;
-                lastRow = row;
-                // Keep pin at base line, move label down; add connector if row > 0
+                if (!placed) {
+                    rows[bestRow] = item.x + (labelWidth / 2);
+                }
+
                 item.pin.style.transform = "translate(-6px,0)";
-                item.lbl.style.top = rowOffsets[row] + "px";
-                if (row > 0) {
-                    var conn = document.createElement("div");
-                    conn.className = "marker-connector";
-                    conn.style.left = (item.x) + "px";
-                    conn.style.top = "10px";
-                    conn.style.height = (rowOffsets[row] - 10) + "px";
-                    conn.style.borderLeftColor = item.color;
-                    markerBar.appendChild(conn);
+                item.lbl.style.top = rowOffsets[bestRow] + "px";
+                if (bestHOffset !== 0) {
+                    item.lbl.style.left = (item.x + bestHOffset) + "px";
                 }
+                var conn = document.createElement("div");
+                conn.className = "marker-connector";
+                conn.style.left = item.x + "px";
+                conn.style.top = "10px";
+                conn.style.height = Math.max(1, rowOffsets[bestRow] - 10) + "px";
+                conn.style.borderLeftColor = item.color;
+                markerBar.appendChild(conn);
                 if (item.warn) {
                     item.pin.classList.add("marker-warning");
                     item.lbl.classList.add("marker-warning");
@@ -1804,6 +1837,8 @@
                 markerBar.appendChild(item.pin);
                 markerBar.appendChild(item.lbl);
             });
+
+            markerBar.removeChild(tempContainer);
 
             // Create ruler
             var ruler = document.createElement("div");
