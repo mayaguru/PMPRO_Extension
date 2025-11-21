@@ -2081,14 +2081,23 @@
                     document.documentElement.style.setProperty('--timeline-scale', timelineScale);
                     render(currentData);
                 } else {
-                    // Vertical Mode: Zoom = Adjust Card Width
-                    var currentW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--card-width'), 10) || 150;
-                    var deltaW = e.deltaY > 0 ? -10 : 10; // Down=Shrink, Up=Grow
-                    var newW = Math.max(100, Math.min(400, currentW + deltaW));
+                    // Vertical Mode: Zoom uniformly scales card width + height
+                    var styles = getComputedStyle(document.documentElement);
+                    var currentW = parseInt(styles.getPropertyValue('--card-width'), 10) || 150;
+                    var currentH = parseInt(styles.getPropertyValue('--card-height'), 10) || 50;
+                    var factor = e.deltaY > 0 ? 0.9 : 1.1; // Down=shrink, Up=grow
+
+                    var newW = Math.max(100, Math.min(400, Math.round(currentW * factor)));
+                    var newH = Math.max(40, Math.min(200, Math.round(currentH * factor)));
 
                     document.documentElement.style.setProperty('--card-width', newW + 'px');
+                    document.documentElement.style.setProperty('--card-height', newH + 'px');
+                    document.documentElement.style.setProperty('--track-height', newH + 'px');
+
                     var wSlider = document.getElementById("width-slider");
                     if (wSlider) wSlider.value = newW;
+                    var hSlider = document.getElementById("height-slider");
+                    if (hSlider) hSlider.value = newH;
                 }
             }, { passive: false });
 
