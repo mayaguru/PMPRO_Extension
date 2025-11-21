@@ -2,5 +2,15 @@
   "flowPath": "D:\\_DEV\\PremiereScripts\\Scripts\\Samples-master\\AmazePanel\\flow\\test.showflow.json",
   "mediaDir": "",
   "renderOutput": "D:/_RenderOut",
-  "renderPreset": "D:/_DEV/PremiereScripts/Scripts/Samples-master/AmazePanel/preset/Apple ProRes 422.epr"
+  "renderPreset": "D:/_DEV/PremiereScripts/Scripts/Samples-master/AmazePanel/preset/Apple ProRes 422.epr",
+  "quickScripts": [
+    {
+      "path": "D:/_DEV/PremiereScripts/Scripts/04_Cal_Mark_Duration.jsx",
+      "label": "04_Cal_Mark_Duration.jsx"
+    },
+    {
+      "path": "D:/_DEV/PremiereScripts/Scripts/05_Clean_InOut.jsx",
+      "label": "05_Clean_InOut.jsx"
+    }
+  ]
 }
