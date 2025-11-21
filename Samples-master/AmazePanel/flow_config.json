@@ -20,10 +20,10 @@
     "fps": 30,
     "quality": 80,
     "region": {
-      "top": 100,
+      "top": 0,
       "left": 0,
-      "width": 900,
-      "height": 450
+      "width": 1280,
+      "height": 720
     }
   }
 }

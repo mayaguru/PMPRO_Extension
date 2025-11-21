@@ -107,7 +107,7 @@
 
         #network-speed-indicator {
             position: absolute;
-            top: 24px;
+            bottom: 170px;
             right: 32px;
             display: flex;
             align-items: center;
@@ -190,6 +190,7 @@
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 18px;
             pointer-events: auto;
+            transition: transform 0.3s ease, opacity 0.25s ease;
         }
 
         .panel-card {
@@ -286,6 +287,50 @@
             padding-left: 18px;
         }
 
+        #controlCollapseBtn {
+            position: absolute;
+            left: 32px;
+            top: 140px;
+            z-index: 5;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: 1px solid rgba(79, 195, 247, 0.6);
+            background: rgba(0, 0, 0, 0.78);
+            color: #e6f7ff;
+            font-size: 12px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+        }
+
+        #controlCollapseBtn::before {
+            content: '⇕';
+            font-size: 15px;
+            opacity: 0.9;
+        }
+
+        #controlCollapseBtn:hover {
+            background: rgba(47, 128, 237, 0.85);
+            color: #fff;
+        }
+
+        body.controls-collapsed #control-panel {
+            transform: translateY(110%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        body.controls-collapsed #controlCollapseBtn {
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+        }
+
         #mini-preview {
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -316,6 +361,13 @@
 
             #control-panel {
                 grid-template-columns: 1fr;
+            }
+
+            #controlCollapseBtn {
+                top: auto;
+                bottom: 24px;
+                left: auto;
+                right: 32px;
             }
         }
     </style>
@@ -422,13 +474,14 @@
                     <div id="log">Ready.</div>
                 </div>
             </div>
+            <button id="controlCollapseBtn" aria-expanded="true">Hide Controls</button>
         </div>
     </div>
 
     <script type="module">
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-        import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/webxr/VRButton.js';
+        import * as THREE from '/static/vendor/three/three.module.js';
+        import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
+        import { VRButton } from '/static/vendor/three/VRButton.js';
 
         const canvas = document.getElementById('vrCanvas');
         const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -439,6 +492,12 @@
         const vrButton = VRButton.createButton(renderer);
         vrButton.style.display = 'none';
         document.body.appendChild(vrButton);
+
+        let xrSession = null;
+        const xrSessionInit = {
+            optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers'],
+            requiredFeatures: ['local-floor']
+        };
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
@@ -539,7 +598,8 @@
             fps: 24,
             quality: 80,
             lightsOn: true,
-            previewVisible: true
+            previewVisible: true,
+            useFrameEndpoint: true
         };
 
         const logEl = document.getElementById('log');
@@ -555,8 +615,26 @@
         const questUrl = document.getElementById('questUrl');
         const statusMessage = document.getElementById('vrStatusMessage');
         const miniPreview = document.getElementById('mini-preview');
-
+        miniPreview.crossOrigin = "anonymous";
         miniPreview.src = "/video_feed";
+        const collapseBtn = document.getElementById('controlCollapseBtn');
+        let controlsCollapsed = false;
+
+        function updateCollapseState() {
+            document.body.classList.toggle('controls-collapsed', controlsCollapsed);
+            if (collapseBtn) {
+                collapseBtn.textContent = controlsCollapsed ? 'Show Controls' : 'Hide Controls';
+                collapseBtn.setAttribute('aria-expanded', (!controlsCollapsed).toString());
+            }
+        }
+
+        if (collapseBtn) {
+            collapseBtn.addEventListener('click', () => {
+                controlsCollapsed = !controlsCollapsed;
+                updateCollapseState();
+            });
+        }
+        updateCollapseState();
 
         function setServerStatus(text, online) {
             serverStatusLabel.textContent = text;
@@ -573,7 +651,7 @@
         }
 
         async function fetchFrameLoop() {
-            while (state.streaming) {
+            while (state.streaming && state.useFrameEndpoint) {
                 const start = performance.now();
                 try {
                     const response = await fetch(`/frame.jpg?ts=${Date.now()}`, { cache: "no-store" });
@@ -603,7 +681,61 @@
             }
         }
 
-        fetchFrameLoop();
+        function startMjpegFallback() {
+            state.useFrameEndpoint = false;
+            setServerStatus("Server online", true);
+            statusMessage.textContent = "스트림 연결됨 (MJPEG fallback).";
+            log("frame.jpg unavailable. Using /video_feed stream for canvas texture.");
+
+            function pump() {
+                if (state.useFrameEndpoint || !state.streaming) {
+                    return;
+                }
+                if (miniPreview.naturalWidth > 0 && miniPreview.naturalHeight > 0) {
+                    if (frameCanvas.width !== miniPreview.naturalWidth || frameCanvas.height !== miniPreview.naturalHeight) {
+                        frameCanvas.width = miniPreview.naturalWidth;
+                        frameCanvas.height = miniPreview.naturalHeight;
+                    }
+                    frameCtx.drawImage(miniPreview, 0, 0, frameCanvas.width, frameCanvas.height);
+                    frameTexture.needsUpdate = true;
+                }
+                if (!state.useFrameEndpoint && state.streaming) {
+                    requestAnimationFrame(pump);
+                }
+            }
+
+            if (miniPreview.complete && miniPreview.naturalWidth > 0) {
+                pump();
+            } else {
+                miniPreview.addEventListener('load', pump, { once: true });
+            }
+        }
+
+        async function probeFrameEndpoint() {
+            try {
+                const res = await fetch(`/frame.jpg?probe=${Date.now()}`, { cache: "no-store" });
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                await res.blob();
+                return true;
+            } catch (err) {
+                log(`frame.jpg unavailable (${err.message}). Falling back to /video_feed.`);
+                return false;
+            }
+        }
+
+        async function beginStreaming() {
+            const hasFrameEndpoint = await probeFrameEndpoint();
+            if (hasFrameEndpoint) {
+                state.useFrameEndpoint = true;
+                fetchFrameLoop();
+            } else {
+                startMjpegFallback();
+            }
+        }
+
+        beginStreaming();
 
         async function refreshHealth() {
             try {
@@ -682,16 +814,54 @@
             log('Camera re-centered');
         });
 
-        document.getElementById('enterVrBtn').addEventListener('click', () => {
-            vrButton.click();
+        const enterVrBtn = document.getElementById('enterVrBtn');
+
+        async function startVrSession() {
+            if (!navigator.xr) {
+                alert('이 브라우저는 WebXR을 지원하지 않습니다.');
+                return;
+            }
+            if (xrSession) {
+                try {
+                    await xrSession.end();
+                } catch (err) {
+                    log(`세션 종료 실패: ${err.message}`);
+                }
+                return;
+            }
+            try {
+                const session = await navigator.xr.requestSession('immersive-vr', xrSessionInit);
+                await renderer.xr.setSession(session);
+                xrSession = session;
+                enterVrBtn.textContent = 'Exit VR';
+                log('VR 세션 시작');
+                session.addEventListener('end', () => {
+                    xrSession = null;
+                    enterVrBtn.textContent = 'Enter VR';
+                    log('VR 세션 종료');
+                }, { once: true });
+            } catch (err) {
+                log(`VR 세션 시작 실패: ${err.message}`);
+                alert('VR 세션을 시작할 수 없습니다.\n' + err.message);
+            }
+        }
+
+        enterVrBtn.addEventListener('click', () => {
+            if (!navigator.xr) {
+                alert('WebXR을 지원하지 않는 환경입니다.');
+                return;
+            }
+            startVrSession();
         });
 
         renderer.xr.addEventListener('sessionstart', () => {
             vrModeLabel.textContent = 'VR Session Active';
+            enterVrBtn.textContent = 'Exit VR';
         });
 
         renderer.xr.addEventListener('sessionend', () => {
             vrModeLabel.textContent = 'Desktop Preview';
+            enterVrBtn.textContent = 'Enter VR';
         });
 
         document.getElementById('ui-toggle-corner-btn').addEventListener('click', () => {
