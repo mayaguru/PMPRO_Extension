@@ -91,6 +91,7 @@ function myCallBackFunction (data) {
 		return;
 	}
 	seq_display.innerHTML	= data;
+	seq_display.title = data ? data : "No active sequence";
 	if (window.refreshFlowMatchState) {
 		window.refreshFlowMatchState();
 	}

@@ -53,14 +53,13 @@
 
         #header {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
-            justify-content: space-between;
-            padding: 4px 8px;
+            gap: 12px;
+            padding: 8px 16px;
             background: #2a2a2a;
             border-bottom: 1px solid #3a3a3a;
             box-shadow: 0 3px 6px rgba(0, 0, 0, 0.35);
-            gap: 8px;
-            flex-shrink: 0;
         }
 
         .title-block h1 {
@@ -105,7 +104,7 @@
         .status-bar {
             display: flex;
             gap: 8px;
-            padding: 10px 16px 0;
+            padding: 0;
             flex-wrap: wrap;
             color: var(--muted);
             font-size: 11px;
@@ -644,6 +643,7 @@
 
                 var seqName = (seqEl.textContent || "").trim();
                 flowNameEl.text(currentFlowName || "[not set]");
+                flowNameEl.attr("title", backupFlowPath || "[not set]");
 
                 dot.classList.remove("match", "mismatch", "neutral");
 
@@ -741,6 +741,9 @@
                 }
                 if (backupFolderLabel && backupFolderLabel.length) {
                     backupFolderLabel.text(backupFolderPath || "[not created]");
+                }
+                if (flowNameEl && flowNameEl.length) {
+                    flowNameEl.attr("title", backupFlowPath || "[not set]");
                 }
             }
 
@@ -1002,26 +1005,26 @@
 
 <body onLoad="onLoaded()" class="theme-showflow">
     <div id="header">
-        <div class="title-block">
-            <h1>AMAZE PANEL</h1>
+        <div class="status-bar">
+            <span class="status-chip" id="active-sequence-chip">
+                <span id="active_seq">[uninitialized]</span>
+            </span>
+            <div class="status-refresh">
+                <button class="pill-btn icon-btn" id="refreshSeq" title="Refresh active sequence"
+                    aria-label="Refresh active sequence">&#x21bb;</button>
+            </div>
+            <span class="status-chip" id="flow-chip">
+                <span id="flow_file_name">[not set]</span>
+                <span class="status-dot neutral" id="flowMatchDot" title="Waiting for sequence and flow"></span>
+            </span>
         </div>
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="showflow">Showflow Editor</button>
             <button class="tab-btn" data-tab="backups">Backups</button>
-            <button class="tab-btn" data-tab="settings">Folder Setting</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
             <button class="tab-btn" data-tab="scripts">Scripts</button>
             <button class="tab-btn pill-btn icon-btn" id="refreshShowflow" title="Refresh Panel" aria-label="Refresh Panel">&#x267b;</button>
         </div>
-    </div>
-
-    <div class="status-bar">
-        <span class="status-chip">Active sequence: <span id="active_seq">[uninitialized]</span></span>
-        <div class="status-refresh">
-            <button class="pill-btn icon-btn" id="refreshSeq" title="Refresh active sequence"
-                aria-label="Refresh active sequence">&#x21bb;</button>
-        </div>
-        <span class="status-chip">Showflow: <span id="flow_file_name">[not set]</span> <span class="status-dot neutral"
-                id="flowMatchDot" title="Waiting for sequence and flow"></span></span>
     </div>
 
     <div id="content">
