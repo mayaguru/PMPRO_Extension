@@ -122,6 +122,39 @@
             padding: 6px 10px;
             border-radius: 8px;
             color: var(--text);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            border: 1px solid #444;
+            background: #666;
+        }
+
+        .status-dot.match {
+            background: #2ecc71;
+            border-color: #1f8f55;
+        }
+
+        .status-dot.mismatch {
+            background: #e74c3c;
+            border-color: #ad2f23;
+        }
+
+        .status-dot.neutral {
+            background: #666;
+            border-color: #444;
+        }
+
+        /* Emphasize the active sequence name */
+        #active_seq {
+            font-size: 13px;
+            font-weight: 700;
         }
 
         .status-bar .pill-btn {
@@ -349,7 +382,6 @@
             function refreshSequenceInfo() {
                 var csInterface = new CSInterface();
                 csInterface.evalScript("$._PPP_.getActiveSequenceName()", myCallBackFunction);
-                csInterface.evalScript("$._PPP_.getProjectProxySetting()", myGetProxyFunction);
             }
 
             // For functions which require interaction at the JavaScript level, we provide these JQuery-based
@@ -433,6 +465,41 @@
             var mediaPathEl = $("#mediaPath");
             var renderPresetEl = $("#renderPresetPath");
             var renderOutputEl = $("#renderOutputPath");
+            var flowMatchEl = $("#flowMatchDot");
+            var flowNameEl = $("#flow_file_name");
+            var currentFlowName = "";
+
+            function baseName(path) {
+                if (!path) return "";
+                var parts = path.split(/[\\/]/);
+                return parts.length ? parts[parts.length - 1] : path;
+            }
+
+            function prefixKey(str) {
+                if (!str) return "";
+                return str.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase();
+            }
+
+            window.refreshFlowMatchState = function () {
+                var dot = flowMatchEl.get(0);
+                var seqEl = document.getElementById("active_seq");
+                if (!dot || !seqEl || !flowNameEl.length) return;
+
+                var seqName = (seqEl.textContent || "").trim();
+                flowNameEl.text(currentFlowName || "[not set]");
+
+                dot.classList.remove("match", "mismatch", "neutral");
+
+                if (!currentFlowName || !seqName || seqName === "[uninitialized]") {
+                    dot.classList.add("neutral");
+                    dot.title = "Waiting for sequence and flow";
+                    return;
+                }
+
+                var match = prefixKey(seqName) === prefixKey(currentFlowName);
+                dot.classList.add(match ? "match" : "mismatch");
+                dot.title = match ? "Flow matches project prefix" : "Flow does not match project prefix";
+            };
 
             function configPath() {
                 var csInterface = new CSInterface();
@@ -458,6 +525,8 @@
                 mediaPathEl.text(parsed.mediaDir || "[not set]");
                 renderPresetEl.text(parsed.renderPreset || "[not set]");
                 renderOutputEl.text(parsed.renderOutput || "[not set]");
+                currentFlowName = baseName(parsed.flowPath || "") || "";
+                window.refreshFlowMatchState();
                 return parsed;
             }
 
@@ -580,10 +649,8 @@
     </div>
 
     <div class="status-bar">
-        <span class="status-chip">User: <span id="username">[uninitialized]</span></span>
-        <span class="status-chip">Version: <span id="version_string">[uninitialized]</span></span>
-        <span class="status-chip">Sequence: <span id="active_seq">[uninitialized]</span></span>
-        <span class="status-chip">Proxies: <span id="proxies_on">[uninitialized]</span></span>
+        <span class="status-chip">Active sequence: <span id="active_seq">[uninitialized]</span></span>
+        <span class="status-chip">Showflow: <span id="flow_file_name">[not set]</span> <span class="status-dot neutral" id="flowMatchDot" title="Waiting for sequence and flow"></span></span>
         <button class="pill-btn" id="refreshSeq">Refresh active sequence</button>
     </div>
 

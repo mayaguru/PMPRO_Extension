@@ -35,10 +35,7 @@ function onLoaded () {
 		csInterface.evalScript("$._PPP_.closeLog()");
 	});
 
-	csInterface.evalScript("$._PPP_.getVersionInfo()", myVersionInfoFunction);	
 	csInterface.evalScript("$._PPP_.getActiveSequenceName()", myCallBackFunction);		
-	csInterface.evalScript("$._PPP_.getUserName()", myUserNameFunction);  
-	csInterface.evalScript("$._PPP_.getProjectProxySetting()", myGetProxyFunction);
 	csInterface.evalScript("$._PPP_.keepPanelLoaded()");
 	csInterface.evalScript("$._PPP_.disableImportWorkspaceWithProjects()");
 	csInterface.evalScript("$._PPP_.registerProjectPanelSelectionChangedFxn()");  	// Project panel selection changed
@@ -89,14 +86,22 @@ function dragHandler(event) {
 
 function myCallBackFunction (data) {
 	// Updates seq_display with whatever ExtendScript function returns.
-	var boilerPlate		= "Active Sequence: ";
 	var seq_display		= document.getElementById("active_seq");
-	seq_display.innerHTML	= boilerPlate + data;
+	if (!seq_display) {
+		return;
+	}
+	seq_display.innerHTML	= data;
+	if (window.refreshFlowMatchState) {
+		window.refreshFlowMatchState();
+	}
 }
 
 function myUserNameFunction (data) {
 	// Updates username with whatever ExtendScript function returns.
 	var user_name		= document.getElementById("username");
+	if (!user_name) {
+		return;
+	}
 	user_name.innerHTML	= data;
 }
 
@@ -118,6 +123,9 @@ function mySetProxyFunction (data) {
 
 function myVersionInfoFunction (data) {
 	var v_string		= document.getElementById("version_string");
+	if (!v_string) {
+		return;
+	}
 	v_string.innerHTML	= data;
 }
 

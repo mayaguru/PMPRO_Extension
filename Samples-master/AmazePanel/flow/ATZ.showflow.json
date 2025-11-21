@@ -12,6 +12,11 @@
     {
       "time": 0,
       "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 600,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "NewClip",
@@ -26,6 +31,11 @@
           "out": 600
         }
       }
+    },
+    {
+      "time": 1200,
+      "duration": 600,
+      "clips": {}
     }
   ]
 }
