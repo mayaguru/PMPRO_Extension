@@ -40,9 +40,23 @@
 
         #header h1 {
             margin: 0;
-            font-size: 16px;
+            margin-right: 20px;
             color: #eee;
-            margin-right: 15px;
+            width: 22px;
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #header h1 .vertical-title {
+            display: inline-block;
+            font-size: 9px;
+            line-height: 1.1;
+            text-align: center;
+            transform: rotate(-90deg);
+            transform-origin: center;
+            letter-spacing: 0.5px;
         }
 
         #controls {
@@ -929,7 +943,7 @@
 <body>
 
     <div id="header">
-        <h1>Showflow Visual Editor</h1>
+        <h1><span class="vertical-title">Showflow<br>Visual<br>Editor</span></h1>
         <div id="controls">
             <div class="status-row">
                 <div id="file-status">
