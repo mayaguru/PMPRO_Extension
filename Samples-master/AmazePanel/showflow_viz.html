@@ -2046,8 +2046,14 @@
 
         function openEdit(sIdx, trKey, clipData) {
             editingTarget = { sIdx: sIdx, trKey: trKey };
-            var cName = clipData.name || clipData;
-            var cDur = clipData.duration || 0;
+            var cName = (clipData && clipData.name) ? clipData.name : clipData;
+            if (cName === undefined || cName === null) cName = "";
+            var slotDur = getSlotDuration(currentData, sIdx);
+            var cDur = getClipDuration(clipData, slotDur);
+            cDur = Math.round(Number(cDur) || 0);
+            if (cDur <= 0) {
+                cDur = slotDur && slotDur > 0 ? Math.round(slotDur) : 600;
+            }
 
             document.getElementById("edit-name").value = cName;
             document.getElementById("edit-duration").value = cDur;
