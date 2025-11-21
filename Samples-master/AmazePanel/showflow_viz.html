@@ -762,6 +762,8 @@
                 <label title="Track Height">H</label>
                 <input type="range" id="height-slider" min="40" max="100" value="50">
             </div>
+            <button onclick="newFlowFromTemplate()">New Flow</button>
+            <button onclick="saveFlowAs()">Save As</button>
             <button onclick="toggleLayout()" id="btn-layout">Timeline View</button>
             <button onclick="toggleEditMode()" id="btn-edit-mode">Edit Mode</button>
             <button onclick="addTrack()">Add Track</button>
@@ -842,6 +844,18 @@
         var playheadPxPerFrame = 1;
         var playheadLabelWidth = 0;
         var playheadTimer = null;
+        var defaultFlowTemplate = {
+            showId: "new_showflow",
+            fps: 60,
+            tracks: { "A": 0, "B": 1, "C": 2, "D": 3, "E": 4 },
+            slots: [
+                {
+                    time: 0,
+                    duration: 600,
+                    clips: {}
+                }
+            ]
+        };
         var playheadContainerId = "playhead-container";
         var playheadLineId = "playhead-line";
         var playheadLocalStamp = 0;
@@ -855,14 +869,60 @@
             return extRoot + sep + "flow_config.json";
         }
 
-        function loadData() {
+        function readFlowConfig() {
             var cfgPath = getFlowConfigPath();
             var res = window.cep.fs.readFile(cfgPath);
-            if (res.err !== 0) {
-                alert("Could not read flow_config.json");
-                return;
+            if (res.err !== 0) return {};
+            try { return JSON.parse(res.data) || {}; }
+            catch (e) { return {}; }
+        }
+
+        function writeFlowConfig(cfg) {
+            var cfgPath = getFlowConfigPath();
+            window.cep.fs.writeFile(cfgPath, JSON.stringify(cfg || {}, null, 2));
+        }
+
+        function setFlowPath(path) {
+            var cfg = readFlowConfig();
+            cfg.flowPath = path;
+            writeFlowConfig(cfg);
+        }
+
+        function pickSavePath(suggestedName) {
+            var suggested = suggestedName || "new.showflow.json";
+            var dialogRes = null;
+            var candidate = null;
+            var sep = (csInterface.getOSInformation().indexOf("Windows") >= 0) ? "\\" : "/";
+
+            if (window.cep && window.cep.fs && window.cep.fs.showSaveDialogEx) {
+                // title, initialPath, fileTypes, defaultName
+                dialogRes = window.cep.fs.showSaveDialogEx("Save Showflow", "", ["json"], suggested);
+                if (dialogRes && dialogRes.err === 0) {
+                    if (dialogRes.data) {
+                        candidate = dialogRes.data;
+                    }
+                }
+            } else if (window.cep && window.cep.fs && window.cep.fs.showSaveDialog) {
+                // title, initialPath, fileTypes, defaultName
+                dialogRes = window.cep.fs.showSaveDialog("Save Showflow", "", ["json"], suggested);
+                if (dialogRes && dialogRes.data) {
+                    candidate = dialogRes.data;
+                }
             }
-            var cfg = JSON.parse(res.data);
+
+            // Fallback: choose a folder, then append the suggested filename
+            if (!candidate && window.cep && window.cep.fs && window.cep.fs.showOpenDialog) {
+                var folderPick = window.cep.fs.showOpenDialog(false, true, "Select folder to save Showflow", "", []);
+                if (folderPick && folderPick.err === 0 && folderPick.data && folderPick.data.length > 0) {
+                    candidate = folderPick.data[0] + sep + suggested;
+                }
+            }
+
+            return candidate;
+        }
+
+        function loadData() {
+            var cfg = readFlowConfig();
             if (!cfg.flowPath) {
                 alert("No Flow Path set in config.");
                 return;
@@ -894,6 +954,38 @@
             } else {
                 alert("Error saving file: " + res.err);
             }
+        }
+
+        function saveFlowAs(suggestedName) {
+            if (!currentData) currentData = JSON.parse(JSON.stringify(defaultFlowTemplate));
+            normalizeData(currentData);
+            var path = pickSavePath(suggestedName);
+            if (!path) {
+                alert("No path chosen. Flow not saved.");
+                return;
+            }
+            if (!/\.json$/i.test(path)) path += ".json";
+
+            var json = JSON.stringify(currentData, null, 2);
+            var res = window.cep.fs.writeFile(path, json);
+            if (res.err === 0) {
+                currentFilePath = path;
+                setFlowPath(path);
+                alert("Saved to " + path);
+            } else {
+                alert("Error saving file: " + res.err);
+            }
+        }
+
+        function newFlowFromTemplate() {
+            // Clone template so edits do not mutate the base
+            var fresh = JSON.parse(JSON.stringify(defaultFlowTemplate));
+            fresh.showId = "showflow_" + Date.now();
+            currentData = fresh;
+            currentFilePath = null;
+            render(currentData);
+            // Immediately prompt for a save location so config picks up the new file
+            saveFlowAs(fresh.showId + ".showflow.json");
         }
 
         function toggleLayout() {

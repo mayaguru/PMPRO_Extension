@@ -1,6 +1,6 @@
 {
-  "flowPath": "D:/_DEV/PremiereScripts/Scripts/Samples-master/AmazePanel/flow/TXTB.showflow.JSON",
+  "flowPath": "D:/_DEV/PremiereScripts/Scripts/Samples-master/AmazePanel/flow/ATZ.showflow.json",
   "mediaDir": "P:/TXTB/FinalMovie/TheaterApp/MP4/_Final/with_audio",
-  "renderOutput": "D:/_TMP",
+  "renderOutput": "D:/_RenderOut",
   "renderPreset": "D:/_DEV/PremiereScripts/Scripts/Samples-master/AmazePanel/preset/Apple ProRes 422.epr"
 }
