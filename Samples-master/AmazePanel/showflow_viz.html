@@ -2047,7 +2047,6 @@
                 originalDataHash = computeDataHash(currentData);
                 lastBackupHash = originalDataHash;
                 updateSaveStatus(true);
-                alert("Saved successfully!");
             } else {
                 alert("Error saving file: " + res.err);
             }
@@ -2078,7 +2077,6 @@
                 var label = document.getElementById("last-backup");
                 if (label) label.textContent = "";
                 startAutoBackup();
-                alert("Saved to " + path);
             } else {
                 alert("Error saving file: " + res.err);
             }
