@@ -124,6 +124,12 @@
             color: var(--text);
         }
 
+        .status-bar .pill-btn {
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
         #content {
             flex: 1;
             min-height: 0;
@@ -336,6 +342,12 @@
                 activateTab($(this).data("tabTarget"));
             });
 
+            function refreshSequenceInfo() {
+                var csInterface = new CSInterface();
+                csInterface.evalScript("$._PPP_.getActiveSequenceName()", myCallBackFunction);
+                csInterface.evalScript("$._PPP_.getProjectProxySetting()", myGetProxyFunction);
+            }
+
             // For functions which require interaction at the JavaScript level, we provide these JQuery-based
             // handlers, instead of directly invoking ExtendScript. This lets us pass data into the ExtendScript layer.
             function runAmazeScript(fileName) {
@@ -536,8 +548,15 @@
                 window.location.href = "refresh.html?ts=" + bust;
             });
 
+            $("#refreshSeq").on("click", function (e) {
+                e.preventDefault();
+                refreshSequenceInfo();
+            });
+
             // Start on Showflow tab by default
             activateTab("showflow");
+            // Sync active sequence when panel regains focus (helps when user switches sequences in PPro)
+            window.addEventListener("focus", refreshSequenceInfo);
         });
     </script>
 </head>
@@ -561,6 +580,7 @@
         <span class="status-chip">Version: <span id="version_string">[uninitialized]</span></span>
         <span class="status-chip">Sequence: <span id="active_seq">[uninitialized]</span></span>
         <span class="status-chip">Proxies: <span id="proxies_on">[uninitialized]</span></span>
+        <button class="pill-btn" id="refreshSeq">Refresh active sequence</button>
     </div>
 
     <div id="content">
