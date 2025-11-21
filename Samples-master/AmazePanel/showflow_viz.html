@@ -789,6 +789,8 @@
             <button onclick="window.location.href='index.html'">Back</button>
             <button onclick="loadData()">Reload</button>
             <button class="primary" onclick="saveData()">Save Changes</button>
+            <button id="render-selected-btn" onclick="renderSelectedClips()" disabled
+                style="background:#d74e00;border-color:#b34000;color:#fff;font-weight:700;">Render Selected</button>
         </div>
     </div>
 
@@ -884,6 +886,88 @@
             return sIdx + "__" + trKey;
         }
 
+        function collectSelectedClips() {
+            if (!currentData || !currentData.slots) return [];
+            var out = [];
+            Object.keys(selectedClips || {}).forEach(function (key) {
+                var parts = key.split("__");
+                var sIdx = parseInt(parts[0], 10);
+                var trKey = parts[1];
+                if (isNaN(sIdx) || !trKey) return;
+                var slot = currentData.slots[sIdx];
+                if (!slot || !slot.clips || !slot.clips[trKey]) return;
+                var clip = slot.clips[trKey];
+                var clipName = (clip && clip.name) ? clip.name : clip;
+                var duration = (clip && clip.duration) ? clip.duration : getSlotDuration(currentData, sIdx);
+                out.push({
+                    slotIndex: sIdx,
+                    track: trKey,
+                    name: clipName,
+                    duration: duration,
+                    time: slot.time || 0
+                });
+            });
+            out.sort(function (a, b) {
+                if (a.time === b.time) {
+                    return (a.track < b.track) ? -1 : (a.track > b.track ? 1 : 0);
+                }
+                return a.time - b.time;
+            });
+            return out;
+        }
+
+        function updateRenderSelectedButton() {
+            var btn = document.getElementById("render-selected-btn");
+            if (!btn) return;
+            var hasSelection = selectedClips && Object.keys(selectedClips).length > 0;
+            btn.disabled = !hasSelection;
+            if (!hasSelection) {
+                btn.style.background = "#444";
+                btn.style.borderColor = "#333";
+                btn.style.color = "#888";
+            } else {
+                btn.style.background = "#d74e00";
+                btn.style.borderColor = "#b34000";
+                btn.style.color = "#fff";
+            }
+        }
+
+        function renderSelectedClips() {
+            var clips = collectSelectedClips();
+            if (!clips.length) {
+                alert("No clips selected. Select clips in tree/timeline first.");
+                return;
+            }
+            var cfg = readFlowConfig();
+            if (!cfg || !cfg.renderPreset) {
+                alert("Render preset not set. Configure it in the panel first.");
+                return;
+            }
+            if (!cfg.renderOutput) {
+                alert("Render output folder not set.");
+                return;
+            }
+            try {
+                var extensionRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+                var scriptPath = extensionRoot.replace(/\\/g, "/") + "/jsx/custom/12_RenderSelectedClips.jsx";
+                var payload = encodeURIComponent(JSON.stringify({
+                    clips: clips,
+                    presetPath: cfg.renderPreset,
+                    outputFolder: cfg.renderOutput
+                }));
+                var evalStr = '$.evalFile("' + scriptPath + '"); $._ext.renderSelectedClips("' + payload + '");';
+                csInterface.evalScript(evalStr, function (res) {
+                    if (res && res.indexOf("ERR:") === 0) {
+                        alert("Error: " + res.replace("ERR:", "").trim());
+                    } else {
+                        alert(res || "RenderRequest completed.");
+                    }
+                });
+            } catch (err) {
+                alert("Failed to queue render: " + err);
+            }
+        }
+
         function isClipSelected(key) {
             return !!(selectedClips && selectedClips[key]);
         }
@@ -898,6 +982,7 @@
                     el.classList.remove("selected");
                 }
             });
+            updateRenderSelectedButton();
         }
 
         function selectRowClips(sIdx, append) {

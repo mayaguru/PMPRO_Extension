@@ -617,11 +617,6 @@
                 window.location.href = "refresh.html?ts=" + bust;
             });
 
-            $("#refreshSeq").on("click", function (e) {
-                e.preventDefault();
-                refreshSequenceInfo();
-            });
-
             // Start on Showflow tab by default
             activateTab("showflow");
             // Sync active sequence when panel regains focus (helps when user switches sequences in PPro)
