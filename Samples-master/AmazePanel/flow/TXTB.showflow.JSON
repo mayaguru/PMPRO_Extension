@@ -10,7 +10,7 @@
   },
   "slots": [
     {
-      "time": 16,
+      "time": 0,
       "duration": 592,
       "clips": {
         "A": {
@@ -46,7 +46,7 @@
       }
     },
     {
-      "time": 608,
+      "time": 592,
       "duration": 614,
       "clips": {
         "A": {
@@ -58,7 +58,7 @@
       }
     },
     {
-      "time": 1222,
+      "time": 1206,
       "duration": 578,
       "clips": {
         "A": {
@@ -94,7 +94,7 @@
       }
     },
     {
-      "time": 1800,
+      "time": 1784,
       "duration": 400,
       "clips": {
         "A": {
@@ -106,7 +106,7 @@
       }
     },
     {
-      "time": 2200,
+      "time": 2184,
       "duration": 800,
       "clips": {
         "A": {
@@ -118,7 +118,7 @@
       }
     },
     {
-      "time": 3000,
+      "time": 2984,
       "duration": 600,
       "clips": {
         "A": {
@@ -130,7 +130,7 @@
       }
     },
     {
-      "time": 3600,
+      "time": 3584,
       "duration": 600,
       "clips": {
         "A": {
@@ -142,7 +142,7 @@
       }
     },
     {
-      "time": 4200,
+      "time": 4184,
       "duration": 600,
       "clips": {
         "A": {
@@ -178,7 +178,7 @@
       }
     },
     {
-      "time": 4800,
+      "time": 4784,
       "duration": 600,
       "clips": {
         "A": {
@@ -188,46 +188,6 @@
           "out": 600
         }
       }
-    },
-    {
-      "time": 5400,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 6000,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 6600,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 7200,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 7800,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 8400,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 9000,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 9600,
-      "duration": 600,
-      "clips": {}
     }
   ]
 }

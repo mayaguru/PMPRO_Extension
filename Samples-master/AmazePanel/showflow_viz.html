@@ -101,7 +101,8 @@
             padding: 0;
             position: relative;
             background: #1a1a1a;
-            align-items: center; /* vertically center the timeline stack */
+            align-items: center;
+            /* vertically center the timeline stack */
         }
 
         #tools-bar {
@@ -140,7 +141,8 @@
             flex-direction: column-reverse;
             width: max-content;
             min-width: 100%;
-            padding: 0 0 60px 0; /* modest space for ruler/markers */
+            padding: 0 0 60px 0;
+            /* modest space for ruler/markers */
             margin-top: auto;
             margin-bottom: auto;
             background: #1a1a1a;
@@ -150,7 +152,8 @@
         .timeline-ruler {
             position: sticky;
             top: auto;
-            bottom: 22px; /* sit just above marker bar */
+            bottom: 22px;
+            /* sit just above marker bar */
             z-index: 100;
             background: #2a2a2a;
             border-top: 2px solid #444;
@@ -175,13 +178,15 @@
             height: 0;
             border-left: 6px solid transparent;
             border-right: 6px solid transparent;
-            border-bottom: 10px solid #ffb347; /* point upward */
+            border-bottom: 10px solid #ffb347;
+            /* point upward */
             transform: translate(-6px, 0);
         }
 
         .marker-label {
             position: absolute;
-            top: 18px; /* push text further below the triangle */
+            top: 18px;
+            /* push text further below the triangle */
             transform: translateX(-50%);
             font-size: 12px;
             color: #ffb347;
@@ -227,8 +232,9 @@
             bottom: 0;
             width: 2px;
             background: #ff4444;
-            z-index: 120;
+            z-index: 140;
             opacity: 0.9;
+            pointer-events: none;
         }
 
         .playhead::before {
@@ -242,6 +248,16 @@
             border-bottom: 2px solid #ff4444;
             transform: rotate(45deg);
         }
+
+        .playhead-container {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 130;
+        }
+
         .marker-warning .marker-pin {
             border-bottom-color: #ff5555 !important;
         }
@@ -751,22 +767,22 @@
         </div>
     </div>
 
-        <div id="tools-bar">
-            <div class="tool-group">
-                <span class="group-label">Markers → Sequence</span>
-                <button onclick="pushMarkersToSequence('append')">Append</button>
-                <button onclick="pushMarkersToSequence('replace')">Replace All</button>
-            </div>
-            <div class="tool-group">
-                <span class="group-label">Sequence → Showflow</span>
-                <button onclick="pullMarkersFromSequence()">Import</button>
-            </div>
-            <div class="tool-group">
-                <span class="group-label">Playhead</span>
-                <button onclick="syncPlayheadFromSeq()">Sync From Seq</button>
-                <button onclick="pushPlayheadToSeq()">Push To Seq</button>
-            </div>
+    <div id="tools-bar">
+        <div class="tool-group">
+            <span class="group-label">Markers → Sequence</span>
+            <button onclick="pushMarkersToSequence('append')">Append</button>
+            <button onclick="pushMarkersToSequence('replace')">Replace All</button>
         </div>
+        <div class="tool-group">
+            <span class="group-label">Sequence → Showflow</span>
+            <button onclick="pullMarkersFromSequence()">Import</button>
+        </div>
+        <div class="tool-group">
+            <span class="group-label">Playhead</span>
+            <button onclick="syncPlayheadFromSeq()">Sync From Seq</button>
+            <button onclick="pushPlayheadToSeq()">Push To Seq</button>
+        </div>
+    </div>
 
     <div id="main-container">
         <div class="timeline-grid" id="grid-root">
@@ -797,7 +813,8 @@
     <div id="marker-modal" style="display:none;">
         <div class="modal-content" style="max-width:680px; width:680px;">
             <h2>Edit Markers</h2>
-            <div id="marker-list" style="max-height:360px; overflow:auto; margin:-8px 0 12px 0; padding-right:4px;"></div>
+            <div id="marker-list" style="max-height:360px; overflow:auto; margin:-8px 0 12px 0; padding-right:4px;">
+            </div>
             <div class="modal-actions">
                 <button onclick="closeMarkerModal()">Cancel</button>
                 <button class="primary" onclick="applyMarkerEdits()">Apply</button>
@@ -815,10 +832,14 @@
         var timelineScale = 1;
         var markerWarnings = {};
         var markerDrag = null;
+        var rulerDrag = null;
         var playheadFrame = 0;
         var playheadPxPerFrame = 1;
         var playheadLabelWidth = 0;
         var playheadTimer = null;
+        var playheadContainerId = "playhead-container";
+        var playheadLineId = "playhead-line";
+        var playheadLocalStamp = 0;
 
         function getFlowConfigPath() {
             var osVersion = csInterface.getOSInformation();
@@ -1145,6 +1166,10 @@
             var pixelsPerFrame = 0.5 * timelineScale;
             var timelineWidth = totalDuration * pixelsPerFrame;
 
+            playheadPxPerFrame = pixelsPerFrame;
+            playheadLabelWidth = labelWidth;
+            ensurePlayheadContainer(timelineWidth + labelWidth);
+
             // Marker bar (authoritative positions)
             var markerBar = document.createElement("div");
             markerBar.className = "timeline-marker-bar";
@@ -1245,21 +1270,8 @@
             root.appendChild(ruler);
 
             // Playhead overlay
-            var playhead = document.createElement("div");
-            playhead.className = "playhead";
-            playhead.style.left = (playheadFrame * pixelsPerFrame + labelWidth) + "px";
-            playhead.onclick = function (e) { e.stopPropagation(); };
-            root.appendChild(playhead);
-
-            // Click to set playhead
-            var setPlayheadFromClick = function (e) {
-                var rect = root.getBoundingClientRect();
-                var x = e.clientX - rect.left - labelWidth;
-                if (x < 0) x = 0;
-                var frame = Math.max(0, Math.round(x / pixelsPerFrame));
-                setPlayheadFrame(frame, true);
-            };
-            ruler.onclick = setPlayheadFromClick;
+            // Scrub playhead
+            ruler.onmousedown = startRulerScrub;
             root.onclick = function (e) {
                 if (e.target === ruler || e.target.classList.contains("timeline-grid")) return;
             };
@@ -1313,6 +1325,8 @@
                 if (measured && !isNaN(measured)) {
                     trackLabels.forEach(function (lbl) { lbl.style.width = measured + "px"; });
                     ruler.style.marginLeft = measured + "px";
+                    markerBar.style.marginLeft = measured + "px";
+                    playheadLabelWidth = measured;
                 }
             }
         }
@@ -1373,6 +1387,9 @@
         }
 
         function renderVertical(data) {
+            // Hide playhead container in vertical mode
+            var phc = document.getElementById(playheadContainerId);
+            if (phc) phc.style.display = "none";
             var root = document.getElementById("grid-root");
             root.innerHTML = "";
             root.className = "timeline-grid";
@@ -1650,6 +1667,30 @@
             }
         }
 
+        function startRulerScrub(e) {
+            e.preventDefault();
+            updateRulerScrub(e);
+            rulerDrag = true;
+            document.addEventListener("mousemove", updateRulerScrub);
+            document.addEventListener("mouseup", endRulerScrub);
+        }
+
+        function updateRulerScrub(e) {
+            var root = document.getElementById("grid-root");
+            if (!root) return;
+            var rect = root.getBoundingClientRect();
+            var x = e.clientX - rect.left - playheadLabelWidth;
+            if (x < 0) x = 0;
+            var frame = Math.max(0, Math.round(x / playheadPxPerFrame));
+            setPlayheadFrame(frame, true);
+        }
+
+        function endRulerScrub(e) {
+            rulerDrag = null;
+            document.removeEventListener("mousemove", updateRulerScrub);
+            document.removeEventListener("mouseup", endRulerScrub);
+        }
+
         function startMarkerDrag(idx, pxPerFrame, e) {
             if (!isEditMode) return;
             e.preventDefault();
@@ -1687,10 +1728,50 @@
             markerDrag = null;
         }
 
+        function startPlayheadPoll() {
+            if (playheadTimer) {
+                clearInterval(playheadTimer);
+                playheadTimer = null;
+            }
+            playheadTimer = setInterval(function () {
+                if (Date.now() - playheadLocalStamp < 500) return;
+                syncPlayheadFromSeq();
+            }, 250);
+        }
+
+        function ensurePlayheadContainer(widthPx) {
+            var container = document.getElementById(playheadContainerId);
+            if (!container) {
+                var mc = document.getElementById("main-container");
+                container = document.createElement("div");
+                container.id = playheadContainerId;
+                container.className = "playhead-container";
+                var line = document.createElement("div");
+                line.id = playheadLineId;
+                line.className = "playhead";
+                container.appendChild(line);
+                mc.appendChild(container);
+            }
+            container.style.width = (widthPx || 0) + "px";
+            container.style.display = "block";
+            updatePlayheadVisual();
+        }
+
         function setPlayheadFrame(frame, pushToSeq) {
             playheadFrame = Math.max(0, Math.round(frame || 0));
             if (pushToSeq) {
+                playheadLocalStamp = Date.now();
+            }
+            updatePlayheadVisual();
+            if (pushToSeq) {
                 pushPlayheadToSeq(playheadFrame);
+            }
+        }
+
+        function updatePlayheadVisual() {
+            var ph = document.getElementById(playheadLineId);
+            if (ph) {
+                ph.style.left = (playheadFrame * playheadPxPerFrame + playheadLabelWidth) + "px";
             }
         }
 
@@ -1700,8 +1781,10 @@
             var jsx = "(function(){\n" +
                 "if(!app.project || !app.project.activeSequence){return 'No active sequence';}\n" +
                 "var seq=app.project.activeSequence;\n" +
-                "var tSec=" + (Number(f) || 0) + "/" + (Number(fps) || 60) + ";\n" +
-                "seq.setPlayerPosition(tSec);\n" +
+                "var fps=" + (Number(fps) || 60) + ";\n" +
+                "var frame=" + (Number(f) || 0) + ";\n" +
+                "var ticks = Math.round((frame/fps) * 254016000000).toString();\n" +
+                "seq.setPlayerPosition(ticks);\n" +
                 "return 'ok';\n" +
                 "})();";
             csInterface.evalScript(jsx, function () { });
@@ -1709,20 +1792,23 @@
 
         function syncPlayheadFromSeq() {
             var jsx = "(function(){\n" +
-                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}"+
+                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}" +
                 "var seq=app.project.activeSequence;\n" +
                 "var fps=60;\n" +
                 "try{if(seq.videoFrameRate&&seq.videoFrameRate.seconds){var f=1/Number(seq.videoFrameRate.seconds);if(f>0)fps=Math.round(f);}}catch(e){}\n" +
                 "var t=seq.getPlayerPosition();\n" +
-                "var sec=(t&&t.seconds)?Number(t.seconds):0;\n" +
-                "return JSON.stringify({frame:Math.round(sec*fps)});\n" +
+                "var ticks = (t && t.ticks) ? Number(t.ticks) : 0;\n" +
+                "var TICKS_PER_SECOND = 254016000000;\n" +
+                "var frame = Math.round((ticks / TICKS_PER_SECOND) * fps);\n" +
+                "return JSON.stringify({frame:frame});\n" +
                 "})();";
             csInterface.evalScript(jsx, function (res) {
                 try {
                     var obj = JSON.parse(res || "{}");
-                    if (obj.error) { alert(obj.error); return; }
+                    if (obj.error) { return; }
+                    // If we recently pushed a local change, skip one poll to avoid bouncing back
+                    if (Date.now() - playheadLocalStamp < 500) return;
                     setPlayheadFrame(obj.frame || 0, false);
-                    render(currentData);
                 } catch (e) { }
             });
         }
@@ -1797,7 +1883,7 @@
 
         function pullMarkersFromSequence() {
             var jsx = "(function(){\n" +
-                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}"+
+                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}" +
                 "var seq = app.project.activeSequence;\n" +
                 "var fps = 60;\n" +
                 "try{ if(seq.videoFrameRate && seq.videoFrameRate.seconds){ var f=1/Number(seq.videoFrameRate.seconds); if(f>0) fps=Math.round(f);} }catch(e){}\n" +
@@ -1837,32 +1923,32 @@
                         var start = markers[i].frame || 0;
                         var end = (i < markers.length - 1) ? markers[i + 1].frame : (start + 600);
                         if (end <= start) end = start + 1;
-                    var slot = {
-                        time: start,
-                        duration: end - start,
-                        name: markers[i].name || ("Marker " + (i + 1)),
-                        clips: {}
-                    };
-                    if (oldSlots[i] && oldSlots[i].clips) {
-                        slot.clips = JSON.parse(JSON.stringify(oldSlots[i].clips));
-                        // align clip durations with new slot duration if they were tiny defaults
-                        Object.keys(slot.clips).forEach(function (ck) {
-                            var clip = slot.clips[ck];
-                            if (!clip) return;
-                            if (typeof clip === "string") {
-                                slot.clips[ck] = { name: clip, duration: slot.duration, in: 0, out: slot.duration };
-                                return;
-                            }
-                            if (isNaN(clip.duration) || clip.duration <= 0 || clip.duration < slot.duration * 0.5) {
-                                clip.duration = slot.duration;
-                            }
-                            if (isNaN(clip.out) || clip.out <= 0 || clip.out < clip.duration * 0.5) {
-                                clip.out = clip.duration;
-                            }
-                        });
+                        var slot = {
+                            time: start,
+                            duration: end - start,
+                            name: markers[i].name || ("Marker " + (i + 1)),
+                            clips: {}
+                        };
+                        if (oldSlots[i] && oldSlots[i].clips) {
+                            slot.clips = JSON.parse(JSON.stringify(oldSlots[i].clips));
+                            // align clip durations with new slot duration if they were tiny defaults
+                            Object.keys(slot.clips).forEach(function (ck) {
+                                var clip = slot.clips[ck];
+                                if (!clip) return;
+                                if (typeof clip === "string") {
+                                    slot.clips[ck] = { name: clip, duration: slot.duration, in: 0, out: slot.duration };
+                                    return;
+                                }
+                                if (isNaN(clip.duration) || clip.duration <= 0 || clip.duration < slot.duration * 0.5) {
+                                    clip.duration = slot.duration;
+                                }
+                                if (isNaN(clip.out) || clip.out <= 0 || clip.out < clip.duration * 0.5) {
+                                    clip.out = clip.duration;
+                                }
+                            });
+                        }
+                        newSlots.push(slot);
                     }
-                    newSlots.push(slot);
-                }
                     // Append any leftover old slots (keep clips) after the imported marker range
                     var runningTime = markers.length > 0 ? (markers[markers.length - 1].frame || 0) + (newSlots[newSlots.length - 1].duration || 0) : 0;
                     for (var j = markers.length; j < oldSlots.length; j++) {
@@ -1961,6 +2047,7 @@
             });
 
             loadData();
+            startPlayheadPoll();
         });
 
     </script>
