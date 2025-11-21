@@ -10,19 +10,44 @@
   },
   "slots": [
     {
-      "time": 0,
-      "duration": 600,
+      "time": 16,
+      "duration": 592,
       "clips": {
-        "A": { "name": "TXTBClip100BranchA", "duration": 600, "in": 0, "out": 600 },
-        "B": { "name": "TXTBClip100BranchB", "duration": 600, "in": 0, "out": 600 },
-        "C": { "name": "TXTBClip100BranchC", "duration": 600, "in": 0, "out": 600 },
-        "D": { "name": "TXTBClip100BranchD", "duration": 600, "in": 0, "out": 600 },
-        "E": { "name": "TXTBClip100BranchE", "duration": 600, "in": 0, "out": 600 }
+        "A": {
+          "name": "TXTBClip100BranchA",
+          "duration": 600,
+          "in": 0,
+          "out": 600
+        },
+        "B": {
+          "name": "TXTBClip100BranchB",
+          "duration": 600,
+          "in": 0,
+          "out": 600
+        },
+        "C": {
+          "name": "TXTBClip100BranchC",
+          "duration": 600,
+          "in": 0,
+          "out": 600
+        },
+        "D": {
+          "name": "TXTBClip100BranchD",
+          "duration": 600,
+          "in": 0,
+          "out": 600
+        },
+        "E": {
+          "name": "TXTBClip100BranchE",
+          "duration": 600,
+          "in": 0,
+          "out": 600
+        }
       }
     },
     {
-      "time": 600,
-      "duration": 600,
+      "time": 608,
+      "duration": 614,
       "clips": {
         "A": {
           "name": "TXTBClip120",
@@ -33,8 +58,8 @@
       }
     },
     {
-      "time": 1200,
-      "duration": 600,
+      "time": 1222,
+      "duration": 578,
       "clips": {
         "A": {
           "name": "TXTBClip130branch2A",
@@ -70,7 +95,7 @@
     },
     {
       "time": 1800,
-      "duration": 600,
+      "duration": 400,
       "clips": {
         "A": {
           "name": "TXTBClip140",
@@ -81,8 +106,8 @@
       }
     },
     {
-      "time": 2400,
-      "duration": 600,
+      "time": 2200,
+      "duration": 800,
       "clips": {
         "A": {
           "name": "TXTBClip150",
@@ -163,6 +188,46 @@
           "out": 600
         }
       }
+    },
+    {
+      "time": 5400,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 6000,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 6600,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 7200,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 7800,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 8400,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 9000,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 9600,
+      "duration": 600,
+      "clips": {}
     }
   ]
 }

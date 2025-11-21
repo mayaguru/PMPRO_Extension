@@ -194,6 +194,7 @@
         .marker-label .marker-time {
             font-weight: bold;
             display: block;
+            font-size: 12px;
         }
 
         .marker-label .marker-name {
@@ -202,11 +203,55 @@
             font-size: 12px;
         }
 
+        .marker-label .marker-frame {
+            display: block;
+            font-size: 11px;
+            margin-top: 1px;
+            color: #bbb;
+        }
+
         .marker-connector {
             position: absolute;
             width: 0;
             border-left: 1px dashed #ffb347;
             pointer-events: none;
+        }
+
+        .marker-pin {
+            cursor: pointer;
+        }
+
+        .playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #ff4444;
+            z-index: 120;
+            opacity: 0.9;
+        }
+
+        .playhead::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: -4px;
+            width: 10px;
+            height: 10px;
+            border-left: 2px solid #ff4444;
+            border-bottom: 2px solid #ff4444;
+            transform: rotate(45deg);
+        }
+        .marker-warning .marker-pin {
+            border-bottom-color: #ff5555 !important;
+        }
+
+        .marker-warning .marker-label {
+            color: #ff5555 !important;
+        }
+
+        .marker-warning .marker-connector {
+            border-left-color: #ff5555 !important;
         }
 
         /* Marker modal tweaks */
@@ -706,17 +751,22 @@
         </div>
     </div>
 
-    <div id="tools-bar">
-        <div class="tool-group">
-            <span class="group-label">Markers → Sequence</span>
-            <button onclick="pushMarkersToSequence('append')">Append</button>
-            <button onclick="pushMarkersToSequence('replace')">Replace All</button>
+        <div id="tools-bar">
+            <div class="tool-group">
+                <span class="group-label">Markers → Sequence</span>
+                <button onclick="pushMarkersToSequence('append')">Append</button>
+                <button onclick="pushMarkersToSequence('replace')">Replace All</button>
+            </div>
+            <div class="tool-group">
+                <span class="group-label">Sequence → Showflow</span>
+                <button onclick="pullMarkersFromSequence()">Import</button>
+            </div>
+            <div class="tool-group">
+                <span class="group-label">Playhead</span>
+                <button onclick="syncPlayheadFromSeq()">Sync From Seq</button>
+                <button onclick="pushPlayheadToSeq()">Push To Seq</button>
+            </div>
         </div>
-        <div class="tool-group">
-            <span class="group-label">Sequence → Showflow</span>
-            <button onclick="pullMarkersFromSequence()">Import</button>
-        </div>
-    </div>
 
     <div id="main-container">
         <div class="timeline-grid" id="grid-root">
@@ -763,6 +813,12 @@
         var isEditMode = false;
         var isHorizontal = false;
         var timelineScale = 1;
+        var markerWarnings = {};
+        var markerDrag = null;
+        var playheadFrame = 0;
+        var playheadPxPerFrame = 1;
+        var playheadLabelWidth = 0;
+        var playheadTimer = null;
 
         function getFlowConfigPath() {
             var osVersion = csInterface.getOSInformation();
@@ -870,6 +926,48 @@
             return 600;
         }
 
+        function detectOverlaps(data) {
+            var warnings = {};
+            if (!data || !data.slots) return warnings;
+            for (var i = 0; i < data.slots.length - 1; i++) {
+                var curr = data.slots[i];
+                var next = data.slots[i + 1];
+                var currEnd = (curr.time || 0) + getSlotDuration(data, i);
+                var nextStart = next ? (next.time || 0) : currEnd;
+                if (currEnd > nextStart) {
+                    warnings[i] = true;
+                    warnings[i + 1] = true;
+                }
+            }
+            return warnings;
+        }
+
+        function updateSlotsFromMarkers(newMarkers, data) {
+            if (!data) return;
+            if (!data.slots) data.slots = [];
+            var slots = data.slots;
+            var minGap = 1;
+            for (var i = 0; i < newMarkers.length; i++) {
+                if (!slots[i]) slots[i] = { time: 0, duration: 600, clips: {} };
+                slots[i].time = newMarkers[i];
+                var next = (i < newMarkers.length - 1) ? newMarkers[i + 1] : null;
+                if (next !== null) {
+                    slots[i].duration = Math.max(minGap, next - newMarkers[i]);
+                } else if (!slots[i].duration || isNaN(slots[i].duration) || slots[i].duration <= 0) {
+                    slots[i].duration = 600;
+                }
+            }
+            // If there are extra slots beyond markers, keep them after last marker
+            if (slots.length > newMarkers.length) {
+                var run = newMarkers.length > 0 ? (newMarkers[newMarkers.length - 1] + (slots[newMarkers.length - 1].duration || 600)) : 0;
+                for (var j = newMarkers.length; j < slots.length; j++) {
+                    slots[j].time = run;
+                    if (!slots[j].duration || isNaN(slots[j].duration) || slots[j].duration <= 0) slots[j].duration = 600;
+                    run += slots[j].duration;
+                }
+            }
+        }
+
         // Effective clip duration for display/layout (prefer trimmed range, then slot length, then clip duration)
         function getClipDuration(clipData, slotDuration) {
             // Marker/slot length is authoritative for layout
@@ -972,6 +1070,7 @@
 
         function render(data) {
             if (data) normalizeData(data);
+            markerWarnings = detectOverlaps(data);
             if (isHorizontal) {
                 renderHorizontal(data);
             } else {
@@ -1068,17 +1167,19 @@
                 pin.title = framesToTimecode(m, fps) + (base ? (" - " + base) : "");
                 pin.style.borderBottomColor = branch ? "#ff7b7b" : "#ffb347";
                 pin.dataset.index = idx;
-                pin.onclick = function (e) {
-                    openMarkerList();
+                pin.onmousedown = function (e) {
+                    startMarkerDrag(idx, pixelsPerFrame, e);
                 };
 
                 var lbl = document.createElement("div");
                 lbl.className = "marker-label";
                 lbl.style.left = (m * pixelsPerFrame) + "px";
                 lbl.style.color = branch ? "#ff7b7b" : "#ffb347";
-                lbl.innerHTML = "<span class='marker-time'>" + framesToTimecode(m, fps) + "</span>" +
-                    "<span class='marker-name'>" + (base || "") + "</span>";
-                markerItems.push({ x: m * pixelsPerFrame, pin: pin, lbl: lbl, color: branch ? "#ff7b7b" : "#ffb347" });
+                lbl.innerHTML = "<span class='marker-name'>" + (base || "") + "</span>" +
+                    "<span class='marker-frame'>" + m + "f</span>" +
+                    "<span class='marker-time'>" + framesToTimecode(m, fps) + "</span>";
+                var warn = markerWarnings && markerWarnings[idx];
+                markerItems.push({ x: m * pixelsPerFrame, pin: pin, lbl: lbl, color: branch ? "#ff7b7b" : "#ffb347", warn: warn });
             });
 
             // Stagger vertically when markers are crowded
@@ -1104,6 +1205,10 @@
                     conn.style.height = (rowOffsets[row] - 10) + "px";
                     conn.style.borderLeftColor = item.color;
                     markerBar.appendChild(conn);
+                }
+                if (item.warn) {
+                    item.pin.classList.add("marker-warning");
+                    item.lbl.classList.add("marker-warning");
                 }
                 markerBar.appendChild(item.pin);
                 markerBar.appendChild(item.lbl);
@@ -1138,6 +1243,26 @@
             // With column-reverse: append timeline elements first so they sit at bottom, then tracks above
             root.appendChild(markerBar);
             root.appendChild(ruler);
+
+            // Playhead overlay
+            var playhead = document.createElement("div");
+            playhead.className = "playhead";
+            playhead.style.left = (playheadFrame * pixelsPerFrame + labelWidth) + "px";
+            playhead.onclick = function (e) { e.stopPropagation(); };
+            root.appendChild(playhead);
+
+            // Click to set playhead
+            var setPlayheadFromClick = function (e) {
+                var rect = root.getBoundingClientRect();
+                var x = e.clientX - rect.left - labelWidth;
+                if (x < 0) x = 0;
+                var frame = Math.max(0, Math.round(x / pixelsPerFrame));
+                setPlayheadFrame(frame, true);
+            };
+            ruler.onclick = setPlayheadFromClick;
+            root.onclick = function (e) {
+                if (e.target === ruler || e.target.classList.contains("timeline-grid")) return;
+            };
 
             sortedTracks.forEach(function (trKey) {
                 var trackRow = document.createElement("div");
@@ -1237,9 +1362,9 @@
                 clip.appendChild(deleteBtn);
             }
 
-            // Double-click to edit
+            // Double-click to edit (only in edit mode)
             clip.ondblclick = function (e) {
-                if (!isEditMode) {
+                if (isEditMode) {
                     openEdit(sIdx, trKey, clipData);
                 }
             };
@@ -1383,7 +1508,7 @@
                     "<div class='clip-meta'>" + cDur + "f</div>";
 
                 card.ondblclick = function () {
-                    if (!isEditMode) openEdit(sIdx, trKey, clipData);
+                    if (isEditMode) openEdit(sIdx, trKey, clipData);
                 };
             } else {
                 card.innerHTML = "<div class='clip-meta'>+</div>";
@@ -1423,6 +1548,7 @@
 
             var newName = document.getElementById("edit-name").value;
             var newDur = parseInt(document.getElementById("edit-duration").value, 10);
+            if (isNaN(newDur) || newDur <= 0) newDur = 1;
 
             var slot = currentData.slots[sIdx];
             if (slot && slot.clips && slot.clips[trKey]) {
@@ -1432,8 +1558,15 @@
                 } else {
                     c.name = newName;
                     c.duration = newDur;
+                    c.in = 0;
+                    c.out = newDur;
                 }
             }
+
+            // Also update slot duration to reflect edited clip, then recompute subsequent slot times
+            var oldDur = getSlotDuration(currentData, sIdx);
+            slot.duration = newDur;
+            recalcSlotTimes(sIdx);
 
             closeModal();
             render(currentData);
@@ -1504,6 +1637,94 @@
             }
 
             render(currentData);
+        }
+
+        function recalcSlotTimes(startIdx) {
+            if (!currentData || !currentData.slots) return;
+            var slots = currentData.slots;
+            // ensure start time stays as-is; propagate updates to subsequent slots
+            for (var i = startIdx + 1; i < slots.length; i++) {
+                var prev = slots[i - 1];
+                var dur = prev.duration || getSlotDuration(currentData, i - 1) || 0;
+                slots[i].time = (prev.time || 0) + dur;
+            }
+        }
+
+        function startMarkerDrag(idx, pxPerFrame, e) {
+            if (!isEditMode) return;
+            e.preventDefault();
+            var markers = collectMarkers(currentData);
+            markerDrag = {
+                idx: idx,
+                pxPerFrame: pxPerFrame,
+                origX: e.clientX,
+                origMarkers: markers.slice()
+            };
+            document.addEventListener("mousemove", onMarkerDragMove);
+            document.addEventListener("mouseup", endMarkerDrag);
+        }
+
+        function onMarkerDragMove(e) {
+            if (!markerDrag) return;
+            var dx = e.clientX - markerDrag.origX;
+            var df = Math.round(dx / markerDrag.pxPerFrame);
+            var newMarkers = markerDrag.origMarkers.slice();
+            var minGap = 60;
+            var prev = markerDrag.idx > 0 ? newMarkers[markerDrag.idx - 1] + minGap : 0;
+            var next = markerDrag.idx < newMarkers.length - 1 ? newMarkers[markerDrag.idx + 1] - minGap : Infinity;
+            var candidate = newMarkers[markerDrag.idx] + df;
+            candidate = Math.max(prev, Math.min(next, candidate));
+            if (candidate === newMarkers[markerDrag.idx]) return;
+            newMarkers[markerDrag.idx] = candidate;
+            updateSlotsFromMarkers(newMarkers, currentData);
+            setPlayheadFrame(candidate, true);
+            render(currentData);
+        }
+
+        function endMarkerDrag() {
+            document.removeEventListener("mousemove", onMarkerDragMove);
+            document.removeEventListener("mouseup", endMarkerDrag);
+            markerDrag = null;
+        }
+
+        function setPlayheadFrame(frame, pushToSeq) {
+            playheadFrame = Math.max(0, Math.round(frame || 0));
+            if (pushToSeq) {
+                pushPlayheadToSeq(playheadFrame);
+            }
+        }
+
+        function pushPlayheadToSeq(frame) {
+            var f = (frame !== undefined) ? frame : playheadFrame;
+            var fps = currentData && currentData.fps ? currentData.fps : 60;
+            var jsx = "(function(){\n" +
+                "if(!app.project || !app.project.activeSequence){return 'No active sequence';}\n" +
+                "var seq=app.project.activeSequence;\n" +
+                "var tSec=" + (Number(f) || 0) + "/" + (Number(fps) || 60) + ";\n" +
+                "seq.setPlayerPosition(tSec);\n" +
+                "return 'ok';\n" +
+                "})();";
+            csInterface.evalScript(jsx, function () { });
+        }
+
+        function syncPlayheadFromSeq() {
+            var jsx = "(function(){\n" +
+                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}"+
+                "var seq=app.project.activeSequence;\n" +
+                "var fps=60;\n" +
+                "try{if(seq.videoFrameRate&&seq.videoFrameRate.seconds){var f=1/Number(seq.videoFrameRate.seconds);if(f>0)fps=Math.round(f);}}catch(e){}\n" +
+                "var t=seq.getPlayerPosition();\n" +
+                "var sec=(t&&t.seconds)?Number(t.seconds):0;\n" +
+                "return JSON.stringify({frame:Math.round(sec*fps)});\n" +
+                "})();";
+            csInterface.evalScript(jsx, function (res) {
+                try {
+                    var obj = JSON.parse(res || "{}");
+                    if (obj.error) { alert(obj.error); return; }
+                    setPlayheadFrame(obj.frame || 0, false);
+                    render(currentData);
+                } catch (e) { }
+            });
         }
 
         // Normalize durations/outs so bad values don't corrupt layout or saves
