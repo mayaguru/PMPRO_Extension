@@ -688,6 +688,10 @@
                 <label title="Timeline Zoom">Zoom</label>
                 <input type="range" id="zoom-slider" min="0.2" max="1.5" step="0.1" value="1">
             </div>
+            <div class="slider-control" id="width-control">
+                <label title="Card Width">W</label>
+                <input type="range" id="width-slider" min="100" max="240" step="5" value="150">
+            </div>
             <div class="slider-control" id="height-control">
                 <label title="Track Height">H</label>
                 <input type="range" id="height-slider" min="40" max="100" value="50">
@@ -707,6 +711,10 @@
             <span class="group-label">Markers → Sequence</span>
             <button onclick="pushMarkersToSequence('append')">Append</button>
             <button onclick="pushMarkersToSequence('replace')">Replace All</button>
+        </div>
+        <div class="tool-group">
+            <span class="group-label">Sequence → Showflow</span>
+            <button onclick="pullMarkersFromSequence()">Import</button>
         </div>
     </div>
 
@@ -813,9 +821,11 @@
             if (isHorizontal) {
                 btn.textContent = "Tree View";
                 zoomControl.style.display = "flex";
+                document.getElementById("width-control").style.display = "none";
             } else {
                 btn.textContent = "Timeline View";
                 zoomControl.style.display = "none";
+                document.getElementById("width-control").style.display = "flex";
             }
 
             render(currentData);
@@ -1540,6 +1550,54 @@
             render(currentData);
         }
 
+        function pullMarkersFromSequence() {
+            var jsx = "(function(){\n" +
+                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}"+
+                "var seq = app.project.activeSequence;\n" +
+                "var fps = 60;\n" +
+                "try{ if(seq.videoFrameRate && seq.videoFrameRate.seconds){ var f=1/Number(seq.videoFrameRate.seconds); if(f>0) fps=Math.round(f);} }catch(e){}\n" +
+                "var out=[];\n" +
+                "if(seq.markers && seq.markers.numMarkers>0){\n" +
+                "  var m=seq.markers.getFirstMarker();\n" +
+                "  while(m){\n" +
+                "    var tSec = (m.start && m.start.seconds)? Number(m.start.seconds):0;\n" +
+                "    var fr = Math.round(tSec*fps);\n" +
+                "    out.push({frame:fr,name:(m.name||'')});\n" +
+                "    m=seq.markers.getNextMarker(m);\n" +
+                "  }\n" +
+                "}\n" +
+                "out.sort(function(a,b){return a.frame-b.frame;});\n" +
+                "return JSON.stringify({fps:fps, markers:out});\n" +
+                "})();";
+
+            csInterface.evalScript(jsx, function (res) {
+                try {
+                    var obj = JSON.parse(res || "{}");
+                    if (obj.error) { alert(obj.error); return; }
+                    var markers = obj.markers || [];
+                    if (markers.length === 0) { alert("No markers found in active sequence."); return; }
+                    if (!currentData) currentData = {};
+                    currentData.fps = obj.fps || 60;
+                    currentData.slots = [];
+                    for (var i = 0; i < markers.length; i++) {
+                        var start = markers[i].frame || 0;
+                        var end = (i < markers.length - 1) ? markers[i + 1].frame : (start + 600);
+                        if (end <= start) end = start + 1;
+                        currentData.slots.push({
+                            time: start,
+                            duration: end - start,
+                            name: markers[i].name || ("Marker " + (i + 1)),
+                            clips: {}
+                        });
+                    }
+                    render(currentData);
+                    alert("Imported " + markers.length + " markers from sequence.");
+                } catch (e) {
+                    alert("Failed to import markers: " + e);
+                }
+            });
+        }
+
         function pushMarkersToSequence(mode) {
             if (!currentData) {
                 alert("No flow loaded.");
@@ -1599,6 +1657,12 @@
                 timelineScale = parseFloat(this.value);
                 document.documentElement.style.setProperty('--timeline-scale', timelineScale);
                 if (isHorizontal) render(currentData);
+            });
+
+            $('#width-slider').on('input', function () {
+                var w = this.value;
+                document.documentElement.style.setProperty('--card-width', w + 'px');
+                if (!isHorizontal) render(currentData);
             });
 
             $('#height-slider').on('input', function () {
