@@ -580,7 +580,7 @@
             // ----- Flow JSON selector (panel layer) -----
             var CONFIG_FILE = "flow_config.json";
             var flowPathEl = $("#flowPath");
-            var mediaPathEl = $("#mediaPath");
+
             var renderPresetEl = $("#renderPresetPath");
             var renderOutputEl = $("#renderOutputPath");
             var flowMatchEl = $("#flowMatchDot");
@@ -842,7 +842,7 @@
 
             function loadFlowConfig() {
                 var path = configPath();
-                var parsed = { flowPath: "", mediaDir: "", renderPreset: "", renderOutput: "" };
+                var parsed = { flowPath: "", renderPreset: "", renderOutput: "" };
                 var res = window.cep.fs.readFile(path);
                 if (res.err === 0 && res.data) {
                     try {
@@ -851,7 +851,7 @@
                     } catch (e) { }
                 }
                 flowPathEl.text(parsed.flowPath || "[not set]");
-                mediaPathEl.text(parsed.mediaDir || "[not set]");
+
                 renderPresetEl.text(parsed.renderPreset || "[not set]");
                 renderOutputEl.text(parsed.renderOutput || "[not set]");
                 updateBackupMeta(parsed.flowPath || "");
@@ -886,22 +886,7 @@
                 saveFlowConfig(current);
             });
 
-            $("#pickMedia").on("click", function (e) {
-                e.preventDefault();
-                var dlg = window.cep.fs.showOpenDialog(false, true, "Select media folder", "", []);
-                if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
-                    var current = loadFlowConfig() || {};
-                    current.mediaDir = dlg.data[0];
-                    saveFlowConfig(current);
-                }
-            });
 
-            $("#clearMedia").on("click", function (e) {
-                e.preventDefault();
-                var current = loadFlowConfig() || {};
-                current.mediaDir = "";
-                saveFlowConfig(current);
-            });
 
             $("#pickRenderPreset").on("click", function (e) {
                 e.preventDefault();
@@ -998,7 +983,8 @@
 
     <div class="status-bar">
         <span class="status-chip">Active sequence: <span id="active_seq">[uninitialized]</span></span>
-        <span class="status-chip">Showflow: <span id="flow_file_name">[not set]</span> <span class="status-dot neutral" id="flowMatchDot" title="Waiting for sequence and flow"></span></span>
+        <span class="status-chip">Showflow: <span id="flow_file_name">[not set]</span> <span class="status-dot neutral"
+                id="flowMatchDot" title="Waiting for sequence and flow"></span></span>
         <button class="pill-btn" id="refreshSeq">Refresh active sequence</button>
     </div>
 
@@ -1012,7 +998,8 @@
         <div class="tab-panel" id="tab-backups">
             <div class="panel-card backup-card">
                 <h2>Backup Center</h2>
-                <p class="muted">Automatic backups run quietly; visit this page when you want to inspect or restore history.</p>
+                <p class="muted">Automatic backups run quietly; visit this page when you want to inspect or restore
+                    history.</p>
                 <div class="backup-meta">
                     <div>Active flow: <span id="backup-flow-path">[not set]</span></div>
                     <div>Backup folder: <span id="backup-folder-path">[not created]</span></div>
@@ -1042,7 +1029,8 @@
                         <button class="controlBg textStyle" id="run_SetInOutByMarkers">Set In/Out by markers</button>
                         <button class="controlBg textStyle" id="run_CalMarkDuration">Calc marker duration</button>
                         <button class="controlBg textStyle" id="run_BuildTestScene">Build test scene</button>
-                        <button class="controlBg textStyle" id="run_BuildFromMedia">Build from media & update showflow</button>
+                        <button class="controlBg textStyle" id="run_BuildFromMedia">Build from media & update
+                            showflow</button>
                         <button class="controlBg textStyle" id="run_UpdateShowflowTemp">Update showflow (temp)</button>
                     </div>
                 </div>
@@ -1070,16 +1058,7 @@
                     </div>
                 </div>
 
-                <div class="panel-card">
-                    <h2>Media folder</h2>
-                    <div class="path-row">
-                        <span class="path-chip" id="mediaPath">[not set]</span>
-                    </div>
-                    <div class="button-grid">
-                        <button class="controlBg textStyle" id="pickMedia">Pick media folder</button>
-                        <button class="controlBg textStyle" id="clearMedia">Clear</button>
-                    </div>
-                </div>
+
 
                 <div class="panel-card">
                     <h2>Render</h2>
@@ -1099,7 +1078,8 @@
                     </div>
                 </div>
             </div>
-            <div id="dragthing" draggable="true" ondragstart="dragHandler(event)" class="ghost-drag">Drag and drop import</div>
+            <div id="dragthing" draggable="true" ondragstart="dragHandler(event)" class="ghost-drag">Drag and drop
+                import</div>
         </div>
     </div>
 </body>
