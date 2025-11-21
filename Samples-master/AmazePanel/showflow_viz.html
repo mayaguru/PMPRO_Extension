@@ -2033,6 +2033,23 @@
             });
         }
 
+        function togglePlayback() {
+            // Toggle Premiere playback via QE (more reliable than JS-only state).
+            var jsx = "(function(){\\n" +
+                "try {\\n" +
+                "  if (app.enableQE) { app.enableQE(); }\\n" +
+                "  var seq = (typeof qe !== 'undefined' && qe.project) ? qe.project.getActiveSequence() : null;\\n" +
+                "  if (!seq) { return 'No active sequence'; }\\n" +
+                "  var playing = false;\\n" +
+                "  try { playing = seq.isPlaying(); } catch(e) { playing = false; }\\n" +
+                "  if (playing) { seq.stop(); return 'stopped'; }\\n" +
+                "  seq.play(1);\\n" +
+                "  return 'playing';\\n" +
+                "} catch(err){ return (err && err.toString) ? err.toString() : err; }\\n" +
+                "})();";
+            csInterface.evalScript(jsx, function () { /* no-op */ });
+        }
+
         $(document).ready(function () {
             $('#zoom-slider').on('input', function () {
                 timelineScale = parseFloat(this.value);
@@ -2064,9 +2081,8 @@
                 } else if (key === "d") {
                     setPlayheadFrame(playheadFrame + 1, true);
                 } else if (key === "s") {
-                    // Toggle playback (Try to use QE or just Stop)
-                    // For now, we'll just stop by re-setting position, which usually halts playback in PPro
-                    setPlayheadFrame(playheadFrame, true);
+                    // Play / pause in Premiere timeline
+                    togglePlayback();
                 }
             });
 
