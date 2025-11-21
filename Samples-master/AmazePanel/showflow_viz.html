@@ -120,6 +120,11 @@
             align-items: center;
         }
 
+        /* Hide playhead controls while keeping DOM/logic intact */
+        .tool-group.playhead-group {
+            display: none;
+        }
+
         .group-label {
             font-size: 11px;
             color: #aaa;
@@ -777,7 +782,7 @@
             <span class="group-label">Sequence → Showflow</span>
             <button onclick="pullMarkersFromSequence()">Import</button>
         </div>
-        <div class="tool-group">
+        <div class="tool-group playhead-group">
             <span class="group-label">Playhead</span>
             <button onclick="syncPlayheadFromSeq()">Sync From Seq</button>
             <button onclick="pushPlayheadToSeq()">Push To Seq</button>
