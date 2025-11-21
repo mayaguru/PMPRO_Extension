@@ -650,6 +650,52 @@
 
         function pad(n) { return n < 10 ? "0" + n : n; }
 
+        // Determine slot duration with fallbacks (explicit duration -> delta to next slot -> default 600f)
+        function getSlotDuration(data, idx) {
+            if (!data || !data.slots || idx < 0 || idx >= data.slots.length) return 0;
+            var slot = data.slots[idx];
+            if (slot && typeof slot.duration === "number" && !isNaN(slot.duration) && slot.duration > 0) {
+                return slot.duration;
+            }
+            var nextSlot = data.slots[idx + 1];
+            if (nextSlot && typeof slot.time === "number" && typeof nextSlot.time === "number") {
+                var diff = nextSlot.time - slot.time;
+                if (diff > 0) return diff;
+            }
+            return 600;
+        }
+
+        // Effective clip duration for display/layout (prefer trimmed range, then slot length, then clip duration)
+        function getClipDuration(clipData, slotDuration) {
+            var trimmed = 0;
+            if (clipData && typeof clipData === "object" && clipData.out !== undefined && clipData.in !== undefined) {
+                trimmed = Number(clipData.out) - Number(clipData.in);
+                if (isNaN(trimmed) || trimmed < 0) trimmed = 0;
+            }
+            var fallbackSlot = (!slotDuration || isNaN(slotDuration) || slotDuration <= 0) ? 600 : slotDuration;
+            var base = trimmed > 0 ? trimmed : (clipData && typeof clipData === "object" && clipData.duration && !isNaN(clipData.duration) ? clipData.duration : fallbackSlot);
+            if (fallbackSlot > 0) {
+                return Math.min(base, fallbackSlot);
+            }
+            return base;
+        }
+
+        // Pick marker spacing (in frames) so labels do not overlap at current zoom
+        function chooseMarkerInterval(pixelsPerFrame) {
+            var minPx = 70; // target minimum spacing in pixels
+            var candidates = [
+                1, 2, 5, 10, 20,
+                30, 60, 120, 240, 300,
+                600, 1200, 1800, 2400, 3600
+            ];
+            for (var i = 0; i < candidates.length; i++) {
+                if (candidates[i] * pixelsPerFrame >= minPx) {
+                    return candidates[i];
+                }
+            }
+            return candidates[candidates.length - 1];
+        }
+
         function render(data) {
             if (isHorizontal) {
                 renderHorizontal(data);
@@ -670,8 +716,12 @@
             // Calculate total timeline duration
             var totalDuration = 0;
             if (data.slots && data.slots.length > 0) {
-                var lastSlot = data.slots[data.slots.length - 1];
-                totalDuration = lastSlot.time + lastSlot.duration;
+                data.slots.forEach(function (slot, idx) {
+                    var slotDur = getSlotDuration(data, idx);
+                    var slotStart = slot.time || 0;
+                    var slotEnd = slotStart + slotDur;
+                    if (slotEnd > totalDuration) totalDuration = slotEnd;
+                });
             }
 
             // Pixels per frame (zoom factor)
@@ -683,8 +733,8 @@
             ruler.className = "timeline-ruler";
             ruler.style.width = timelineWidth + "px";
 
-            // Add ruler markers every 60 frames (1 second at 60fps)
-            var markerInterval = 60;
+            // Add ruler markers with dynamic spacing to avoid label overlap
+            var markerInterval = chooseMarkerInterval(pixelsPerFrame);
             for (var i = 0; i <= totalDuration; i += markerInterval) {
                 var marker = document.createElement("div");
                 marker.className = "ruler-marker major";
@@ -725,7 +775,8 @@
                         var clipData = slot.clips ? slot.clips[trKey] : null;
 
                         if (clipData) {
-                            var clip = createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps);
+                            var slotDur = getSlotDuration(data, sIdx);
+                            var clip = createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps, slotDur);
                             trackContent.appendChild(clip);
                         }
                     });
@@ -736,13 +787,17 @@
             });
         }
 
-        function createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps) {
+        function createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps, slotDuration) {
             var clip = document.createElement("div");
             clip.className = "timeline-clip";
 
             var cName = clipData.name || clipData;
-            var cDur = clipData.duration || slot.duration;
-            var startPos = slot.time * pixelsPerFrame;
+            var effectiveSlotDur = slotDuration || (slot ? slot.duration : 0);
+            if (!effectiveSlotDur || isNaN(effectiveSlotDur) || effectiveSlotDur <= 0) effectiveSlotDur = 600;
+            var cDur = getClipDuration(clipData, effectiveSlotDur);
+            if (!cDur || isNaN(cDur)) cDur = effectiveSlotDur || 1;
+
+            var startPos = (slot.time || 0) * pixelsPerFrame;
             var width = cDur * pixelsPerFrame;
 
             clip.style.left = startPos + "px";
@@ -813,10 +868,11 @@
 
             if (data.slots) {
                 data.slots.forEach(function (slot, sIdx) {
+                    var slotDur = getSlotDuration(data, sIdx);
                     var timeCell = document.createElement("div");
                     timeCell.className = "time-marker";
                     timeCell.innerHTML = "<span>" + framesToTimecode(slot.time, fps) + "</span>" +
-                        "<span class='dur'>Dur: " + slot.duration + "f</span>";
+                        "<span class='dur'>Dur: " + slotDur + "f</span>";
 
                     var insertBtn = document.createElement("div");
                     insertBtn.className = "insert-row-btn";
@@ -855,6 +911,8 @@
         function createSlotCell(slot, sIdx, trKey, data) {
             var cell = document.createElement("div");
             cell.className = "slot-cell";
+            var slotDur = getSlotDuration(data, sIdx);
+            if (!slotDur || isNaN(slotDur) || slotDur <= 0) slotDur = 600;
 
             cell.ondragover = function (e) {
                 e.preventDefault();
@@ -882,7 +940,8 @@
                 };
 
                 var cName = clipData.name || clipData;
-                var cDur = clipData.duration || slot.duration;
+                var cDur = getClipDuration(clipData, slotDur);
+                if (!cDur || isNaN(cDur)) cDur = slotDur;
 
                 var deleteBtnHTML = "";
                 if (isEditMode) {
@@ -899,7 +958,8 @@
             } else {
                 card.innerHTML = "<div class='clip-meta'>+</div>";
                 card.onclick = function () {
-                    var newClip = { name: "NewClip", duration: slot.duration, in: 0, out: slot.duration };
+                    var newDur = slotDur || 600;
+                    var newClip = { name: "NewClip", duration: newDur, in: 0, out: newDur };
                     if (!slot.clips) slot.clips = {};
                     slot.clips[trKey] = newClip;
                     render(currentData);
