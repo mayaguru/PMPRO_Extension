@@ -539,6 +539,121 @@
         a.inline-link:hover {
             text-decoration: underline;
         }
+
+        .vr-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .vr-preview-panel {
+            background: #151515;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .vr-preview-panel h3 {
+            margin: 0;
+        }
+
+        .vr-preview-display {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #333;
+            background: #000;
+        }
+
+        .vr-preview-display img,
+        .vr-preview-display iframe {
+            width: 100%;
+            height: 260px;
+            display: block;
+            border: none;
+            background: #000;
+        }
+
+        .vr-preview-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.68);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 13px;
+            padding: 12px;
+            pointer-events: none;
+        }
+
+        .vr-config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .vr-config-grid label {
+            font-size: 11px;
+            color: var(--muted);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .vr-config-grid input,
+        .vr-config-grid select {
+            background: #1e1e1e;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 8px;
+            color: var(--text);
+            font-size: 12px;
+        }
+
+        .vr-button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .vr-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 10px;
+        }
+
+        .vr-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            border: 1px solid var(--border);
+            background: #1f1f1f;
+            color: var(--muted);
+        }
+
+        .vr-status-pill.online {
+            border-color: #1f8f55;
+            color: #2ecc71;
+        }
+
+        .vr-status-pill.offline {
+            border-color: #ad2f23;
+            color: #ff6b6b;
+        }
     </style>
     <script type="text/javascript">
         $(document).ready(function () {
@@ -568,6 +683,43 @@
             var QUICK_SLOT_COUNT = 6;
             var quickScriptState = [];
             var quickPlaceholderText = "스크립트를 설정하세요.";
+            var defaultVrConfig = {
+                serverUrl: "http://localhost:5000",
+                mode: "region",
+                monitorIndex: 1,
+                fps: 30,
+                quality: 80,
+                region: {
+                    top: 0,
+                    left: 0,
+                    width: 1280,
+                    height: 720
+                }
+            };
+            var currentVrConfig = JSON.parse(JSON.stringify(defaultVrConfig));
+            var vrMonitors = [];
+            var vrStatusTimer = null;
+            var vrEls = {
+                statusText: $("#vrStatusText"),
+                statusChip: $("#vrStatusChip"),
+                statusLabel: $("#vrStatusLabel"),
+                previewImage: $("#vrPreviewImage"),
+                previewOverlay: $("#vrPreviewOverlay"),
+                frame: $("#vrFrame"),
+                frameOverlay: $("#vrFrameOverlay"),
+                serverUrl: $("#vrServerUrl"),
+                modeSelect: $("#vrMode"),
+                fpsInput: $("#vrFps"),
+                qualityInput: $("#vrQuality"),
+                monitorSelect: $("#vrMonitorIndex"),
+                topInput: $("#vrTop"),
+                leftInput: $("#vrLeft"),
+                widthInput: $("#vrWidth"),
+                heightInput: $("#vrHeight"),
+                configStatus: $("#vrConfigStatus"),
+                localIp: $("#vrLocalIp"),
+                instructionIp: $("#local-ip-display")
+            };
 
             function isAbsoluteScriptPath(path) {
                 if (!path) return false;
@@ -1020,9 +1172,9 @@
                 return extRoot + sep + CONFIG_FILE;
             }
 
-            function loadFlowConfig() {
-                var path = configPath();
+            function readConfigFileRaw() {
                 var parsed = { flowPath: "", renderPreset: "", renderOutput: "", quickScripts: [] };
+                var path = configPath();
                 var res = window.cep.fs.readFile(path);
                 if (res.err === 0 && res.data) {
                     try {
@@ -1030,6 +1182,280 @@
                         if (raw) parsed = raw;
                     } catch (e) { }
                 }
+                if (!Array.isArray(parsed.quickScripts)) {
+                    parsed.quickScripts = [];
+                }
+                return parsed;
+            }
+
+            function mergeVrConfig(raw) {
+                var merged = JSON.parse(JSON.stringify(defaultVrConfig));
+                if (!raw) {
+                    return merged;
+                }
+                merged.serverUrl = raw.serverUrl || merged.serverUrl;
+                merged.mode = (raw.mode === "monitor" || raw.mode === "region") ? raw.mode : merged.mode;
+                if (typeof raw.monitorIndex !== "undefined") {
+                    merged.monitorIndex = parseInt(raw.monitorIndex, 10) || merged.monitorIndex;
+                }
+                if (typeof raw.monitor_index !== "undefined") {
+                    merged.monitorIndex = parseInt(raw.monitor_index, 10) || merged.monitorIndex;
+                }
+                if (typeof raw.fps !== "undefined") {
+                    merged.fps = parseInt(raw.fps, 10) || merged.fps;
+                }
+                if (typeof raw.quality !== "undefined") {
+                    merged.quality = parseInt(raw.quality, 10) || merged.quality;
+                }
+                var regionSource = raw.region || {};
+                if (typeof raw.top !== "undefined" || typeof raw.left !== "undefined") {
+                    regionSource = {
+                        top: raw.top,
+                        left: raw.left,
+                        width: raw.width,
+                        height: raw.height
+                    };
+                }
+                merged.region = merged.region || {};
+                merged.region.top = parseInt(regionSource.top, 10) >= 0 ? parseInt(regionSource.top, 10) : merged.region.top;
+                merged.region.left = parseInt(regionSource.left, 10) >= 0 ? parseInt(regionSource.left, 10) : merged.region.left;
+                merged.region.width = parseInt(regionSource.width, 10) > 0 ? parseInt(regionSource.width, 10) : merged.region.width;
+                merged.region.height = parseInt(regionSource.height, 10) > 0 ? parseInt(regionSource.height, 10) : merged.region.height;
+                return merged;
+            }
+
+            function updateVrInputs() {
+                if (!vrEls.serverUrl) {
+                    return;
+                }
+                vrEls.serverUrl.val(currentVrConfig.serverUrl || "");
+                vrEls.modeSelect.val(currentVrConfig.mode || "region");
+                vrEls.fpsInput.val(currentVrConfig.fps || 30);
+                vrEls.qualityInput.val(currentVrConfig.quality || 80);
+                vrEls.topInput.val(currentVrConfig.region.top || 0);
+                vrEls.leftInput.val(currentVrConfig.region.left || 0);
+                vrEls.widthInput.val(currentVrConfig.region.width || 1280);
+                vrEls.heightInput.val(currentVrConfig.region.height || 720);
+                if (vrEls.monitorSelect && vrEls.monitorSelect.length) {
+                    vrEls.monitorSelect.val(String(currentVrConfig.monitorIndex));
+                }
+                var displayUrl = sanitizeVrUrl(currentVrConfig.serverUrl) || "http://localhost:5000";
+                if (vrEls.instructionIp && vrEls.instructionIp.length) {
+                    vrEls.instructionIp.text(displayUrl);
+                }
+            }
+
+            function updateMonitorOptions(monitors) {
+                vrMonitors = monitors || [];
+                if (!vrEls.monitorSelect || vrEls.monitorSelect.length === 0) {
+                    return;
+                }
+                vrEls.monitorSelect.empty();
+                if (!vrMonitors.length) {
+                    vrEls.monitorSelect.append("<option value=\"0\">Virtual desktop</option>");
+                    if (currentVrConfig.monitorIndex > 0) {
+                        vrEls.monitorSelect.append("<option value=\"" + currentVrConfig.monitorIndex + "\">Monitor " + currentVrConfig.monitorIndex + "</option>");
+                    }
+                } else {
+                    vrMonitors.forEach(function (mon) {
+                        var label = "Monitor " + mon.index + " (" + mon.width + "x" + mon.height + ")";
+                        if (mon.index === 0) {
+                            label = "All displays (" + mon.width + "x" + mon.height + ")";
+                        }
+                        vrEls.monitorSelect.append("<option value=\"" + mon.index + "\">" + label + "</option>");
+                    });
+                }
+                vrEls.monitorSelect.val(String(currentVrConfig.monitorIndex));
+            }
+
+            function sanitizeVrUrl(url) {
+                if (!url) return "";
+                var trimmed = String(url).trim();
+                if (!trimmed) return "";
+                if (!/^https?:\/\//i.test(trimmed)) {
+                    trimmed = "http://" + trimmed;
+                }
+                return trimmed.replace(/\/+$/, "");
+            }
+
+            function buildVrEndpoint(path) {
+                var base = sanitizeVrUrl(currentVrConfig.serverUrl);
+                if (!base) return "";
+                if (!path) return base;
+                if (path.charAt(0) !== "/") {
+                    path = "/" + path;
+                }
+                return base + path;
+            }
+
+            function setVrStatus(text, isOnline) {
+                if (vrEls.statusText && vrEls.statusText.length) {
+                    vrEls.statusText.text(text || "");
+                }
+                if (!vrEls.statusChip || vrEls.statusChip.length === 0) {
+                    return;
+                }
+                vrEls.statusChip.removeClass("online offline");
+                vrEls.statusChip.addClass(isOnline ? "online" : "offline");
+                if (vrEls.statusLabel && vrEls.statusLabel.length) {
+                    vrEls.statusLabel.text(isOnline ? "Online" : "Offline");
+                }
+                if (isOnline) {
+                    if (vrEls.previewOverlay && vrEls.previewOverlay.length) {
+                        vrEls.previewOverlay.hide();
+                    }
+                    if (vrEls.frameOverlay && vrEls.frameOverlay.length) {
+                        vrEls.frameOverlay.hide();
+                    }
+                } else {
+                    if (vrEls.previewOverlay && vrEls.previewOverlay.length) {
+                        vrEls.previewOverlay.text(text || "Server offline").show();
+                    }
+                    if (vrEls.frameOverlay && vrEls.frameOverlay.length) {
+                        var overlayText = currentVrConfig.serverUrl ? "Server offline" : "Server URL not set";
+                        vrEls.frameOverlay.text(overlayText).show();
+                    }
+                }
+            }
+
+            function refreshVrPreview() {
+                if (!vrEls.previewImage || vrEls.previewImage.length === 0) {
+                    return;
+                }
+                var endpoint = buildVrEndpoint("/video_feed");
+                if (!endpoint) {
+                    vrEls.previewImage.removeAttr("src");
+                    if (vrEls.previewOverlay && vrEls.previewOverlay.length) {
+                        vrEls.previewOverlay.text("Set a server URL to preview").show();
+                    }
+                    return;
+                }
+                vrEls.previewImage.attr("src", endpoint + "?ts=" + Date.now());
+            }
+
+            function updateVrFrameSource() {
+                if (!vrEls.frame || vrEls.frame.length === 0) {
+                    return;
+                }
+                var base = sanitizeVrUrl(currentVrConfig.serverUrl);
+                if (!base) {
+                    vrEls.frame.attr("src", "about:blank");
+                    if (vrEls.frameOverlay && vrEls.frameOverlay.length) {
+                        vrEls.frameOverlay.text("Server URL not set").show();
+                    }
+                    return;
+                }
+                vrEls.frame.attr("src", base + "/?ts=" + Date.now());
+                if (vrEls.frameOverlay && vrEls.frameOverlay.length) {
+                    vrEls.frameOverlay.hide();
+                }
+            }
+
+            function persistVrConfig() {
+                var cfg = readConfigFileRaw();
+                cfg.vr = currentVrConfig;
+                saveFlowConfig(cfg);
+            }
+
+            function pingVrServer(showStatusText) {
+                var endpoint = buildVrEndpoint("/health");
+                if (!endpoint) {
+                    setVrStatus("Set a server URL to begin.", false);
+                    return Promise.resolve();
+                }
+                if (showStatusText) {
+                    setVrStatus("Checking server...", false);
+                }
+                return fetch(endpoint + "?ts=" + Date.now(), { cache: "no-store" })
+                    .then(function (res) {
+                        if (!res.ok) {
+                            throw new Error("HTTP " + res.status);
+                        }
+                        return res.json();
+                    })
+                    .then(function (payload) {
+                        setVrStatus("Server reachable", true);
+                        if (payload && payload.ip && vrEls.localIp && vrEls.localIp.length) {
+                            vrEls.localIp.text(payload.ip);
+                            if (vrEls.instructionIp && vrEls.instructionIp.length) {
+                                vrEls.instructionIp.text("http://" + payload.ip + ":5000");
+                            }
+                        }
+                        if (payload && payload.monitors) {
+                            updateMonitorOptions(payload.monitors);
+                        }
+                        if (payload && payload.config) {
+                            var merged = mergeVrConfig(payload.config);
+                            merged.serverUrl = currentVrConfig.serverUrl;
+                            currentVrConfig = merged;
+                            updateVrInputs();
+                        }
+                        refreshVrPreview();
+                        updateVrFrameSource();
+                    })
+                    .catch(function (err) {
+                        setVrStatus("Server unreachable (" + err.message + ")", false);
+                        if (vrEls.localIp && vrEls.localIp.length) {
+                            vrEls.localIp.text("-");
+                        }
+                    });
+            }
+
+            function sendVrConfigToServer() {
+                var endpoint = buildVrEndpoint("/update_config");
+                if (!endpoint) {
+                    alert("Set the VR server URL first.");
+                    return;
+                }
+                if (vrEls.configStatus) {
+                    vrEls.configStatus.text("Sending settings to server...");
+                }
+                var payload = {
+                    monitor_index: currentVrConfig.monitorIndex,
+                    mode: currentVrConfig.mode,
+                    fps: currentVrConfig.fps,
+                    quality: currentVrConfig.quality,
+                    region: {
+                        top: currentVrConfig.region.top,
+                        left: currentVrConfig.region.left,
+                        width: currentVrConfig.region.width,
+                        height: currentVrConfig.region.height
+                    }
+                };
+                fetch(endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                }).then(function (res) {
+                    if (!res.ok) {
+                        throw new Error("HTTP " + res.status);
+                    }
+                    return res.json();
+                }).then(function () {
+                    if (vrEls.configStatus) {
+                        vrEls.configStatus.text("Applied at " + new Date().toLocaleTimeString());
+                    }
+                    refreshVrPreview();
+                    return pingVrServer();
+                }).catch(function (err) {
+                    if (vrEls.configStatus) {
+                        vrEls.configStatus.text("Failed to send settings: " + err.message);
+                    }
+                });
+            }
+
+            function readNumberValue(element, fallback, min) {
+                var val = parseInt(element.val(), 10);
+                if (isNaN(val)) {
+                    val = fallback;
+                }
+                if (typeof min === "number") {
+                    val = Math.max(min, val);
+                }
+                return val;
+            }
+            function loadFlowConfig() {
+                var parsed = readConfigFileRaw();
                 flowPathEl.text(parsed.flowPath || "[not set]");
 
                 renderPresetEl.text(parsed.renderPreset || "[not set]");
@@ -1038,6 +1464,10 @@
                 currentFlowName = baseName(parsed.flowPath || "") || "";
                 window.refreshFlowMatchState();
                 refreshQuickRunUI(parsed.quickScripts || []);
+                currentVrConfig = mergeVrConfig(parsed.vr);
+                updateVrInputs();
+                updateVrFrameSource();
+                refreshVrPreview();
                 return parsed;
             }
 
@@ -1103,8 +1533,94 @@
                 saveFlowConfig(current);
             });
 
+            $("#btn-vr-save-host").on("click", function (e) {
+                e.preventDefault();
+                currentVrConfig.serverUrl = sanitizeVrUrl(vrEls.serverUrl.val());
+                currentVrConfig.mode = (vrEls.modeSelect.val() === "monitor") ? "monitor" : "region";
+                currentVrConfig.fps = readNumberValue(vrEls.fpsInput, defaultVrConfig.fps, 1);
+                currentVrConfig.quality = readNumberValue(vrEls.qualityInput, defaultVrConfig.quality, 10);
+                currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                persistVrConfig();
+                updateVrInputs();
+                updateVrFrameSource();
+                pingVrServer(true);
+            });
+
+            $("#btn-vr-apply").on("click", function (e) {
+                e.preventDefault();
+                currentVrConfig.region.top = readNumberValue(vrEls.topInput, currentVrConfig.region.top, 0);
+                currentVrConfig.region.left = readNumberValue(vrEls.leftInput, currentVrConfig.region.left, 0);
+                currentVrConfig.region.width = readNumberValue(vrEls.widthInput, currentVrConfig.region.width, 1);
+                currentVrConfig.region.height = readNumberValue(vrEls.heightInput, currentVrConfig.region.height, 1);
+                currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                persistVrConfig();
+                sendVrConfigToServer();
+            });
+
+            $("#btn-vr-check").on("click", function (e) {
+                e.preventDefault();
+                pingVrServer(true);
+            });
+
+            $("#btn-vr-refresh-preview").on("click", function (e) {
+                e.preventDefault();
+                refreshVrPreview();
+            });
+
+            $("#btn-vr-seq-dims").on("click", function (e) {
+                e.preventDefault();
+                var csInterface = new CSInterface();
+                csInterface.evalScript("$._PPP_.getActiveSequenceFrameSize()", function (res) {
+                    if (!res || res.indexOf("|") === -1) {
+                        alert("Unable to read sequence dimensions.");
+                        return;
+                    }
+                    var parts = res.split("|");
+                    var width = parseInt(parts[0], 10);
+                    var height = parseInt(parts[1], 10);
+                    if (width > 0 && height > 0) {
+                        vrEls.widthInput.val(width);
+                        vrEls.heightInput.val(height);
+                    }
+                });
+            });
+
+            $("#btn-open-browser").on("click", function (e) {
+                e.preventDefault();
+                var url = sanitizeVrUrl(currentVrConfig.serverUrl);
+                if (!url) {
+                    alert("Set the server URL first.");
+                    return;
+                }
+                window.cep.util.openURLInDefaultBrowser(url);
+            });
+
+            $("#btn-start-server").on("click", function (e) {
+                e.preventDefault();
+                var csInterface = new CSInterface();
+                var osInfo = csInterface.getOSInformation();
+                if (!osInfo || osInfo.indexOf("Windows") === -1) {
+                    alert("Starting the Python server is only supported on Windows.");
+                    return;
+                }
+                var extPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+                var scriptPath = extPath.replace(/\//g, "\\\\") + "\\\\python_server\\\\start_server.bat";
+                var quotedPath = "\"" + scriptPath + "\"";
+                window.cep.process.createProcess("cmd.exe", "/c", "start", "\"VRServer\"", quotedPath);
+            });
+
             // init flow display
             loadFlowConfig();
+
+            updateMonitorOptions([]);
+            setVrStatus("Waiting for server...", false);
+            pingVrServer();
+            if (vrStatusTimer) {
+                clearInterval(vrStatusTimer);
+            }
+            vrStatusTimer = setInterval(function () {
+                pingVrServer();
+            }, 15000);
 
             $("#openViz").on("click", function (e) {
                 e.preventDefault();
@@ -1171,7 +1687,9 @@
             <button class="tab-btn" data-tab="backups">Backups</button>
             <button class="tab-btn" data-tab="settings">Settings</button>
             <button class="tab-btn" data-tab="scripts">Scripts</button>
-            <button class="tab-btn pill-btn icon-btn" id="refreshShowflow" title="Refresh Panel" aria-label="Refresh Panel">&#x267b;</button>
+            <button class="tab-btn" data-tab="vr">VR</button>
+            <button class="tab-btn pill-btn icon-btn" id="refreshShowflow" title="Refresh Panel"
+                aria-label="Refresh Panel">&#x267b;</button>
         </div>
     </div>
 
@@ -1283,48 +1801,163 @@
             </div>
         </div>
 
-        <div class="tab-panel" id="tab-settings">
-            <div class="panel-grid">
-                <div class="panel-card">
-                    <h2>Flow file</h2>
-                    <div class="path-row">
-                        <span class="path-chip" id="flowPath">[not set]</span>
-                    </div>
-                    <div class="button-grid">
-                        <div class="button-pair">
-                            <button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
-                            <button class="controlBg textStyle" id="clearFlow">Clear</button>
+                <div class="tab-panel" id="tab-settings">
+                    <div class="panel-grid">
+                        <div class="panel-card">
+                            <h2>Flow file</h2>
+                            <div class="path-row">
+                                <span class="path-chip" id="flowPath">[not set]</span>
+                            </div>
+                            <div class="button-grid">
+                                <div class="button-pair">
+                                    <button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
+                                    <button class="controlBg textStyle" id="clearFlow">Clear</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel-card">
+                            <h2>Render</h2>
+                            <div class="path-row">
+                                <span class="path-chip">Preset: <span id="renderPresetPath">[not set]</span></span>
+                            </div>
+                            <div class="button-grid">
+                                <div class="button-pair">
+                                    <button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
+                                    <button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
+                                </div>
+                            </div>
+                            <div class="path-row">
+                                <span class="path-chip">Output: <span id="renderOutputPath">[not set]</span></span>
+                            </div>
+                            <div class="button-grid">
+                                <div class="button-pair">
+                                    <button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    <div id="dragthing" draggable="true" ondragstart="dragHandler(event)" class="ghost-drag">Drag and drop
+                        import</div>
                 </div>
 
-
-
-                <div class="panel-card">
-                    <h2>Render</h2>
-                    <div class="path-row">
-                        <span class="path-chip">Preset: <span id="renderPresetPath">[not set]</span></span>
-                    </div>
-                    <div class="button-grid">
-                        <div class="button-pair">
-                            <button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
-                            <button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
+                <div class="tab-panel" id="tab-vr">
+                    <div class="panel-card">
+                        <div class="card-head">
+                            <div>
+                                <h2>VR Streamer</h2>
+                                <p class="muted" id="vrStatusText">Waiting for server...</p>
+                            </div>
+                            <div class="status-refresh">
+                                <span class="vr-status-pill offline" id="vrStatusChip">
+                                    <span class="status-dot mismatch"></span>
+                                    <span id="vrStatusLabel">Offline</span>
+                                </span>
+                                <button class="pill-btn" id="btn-vr-refresh-preview">Reload Preview</button>
+                                <button class="pill-btn" id="btn-vr-check">Check Server</button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="path-row">
-                        <span class="path-chip">Output: <span id="renderOutputPath">[not set]</span></span>
-                    </div>
-                    <div class="button-grid">
-                        <div class="button-pair">
-                            <button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
-                            <button class="controlBg textStyle" id="clearRenderOutput">Clear output</button>
+
+                        <div class="vr-preview-grid">
+                            <div class="vr-preview-panel">
+                                <div class="card-head" style="margin-bottom: 0;">
+                                    <div>
+                                        <h3>Panel Preview</h3>
+                                        <p class="muted">MJPEG feed (Program Monitor crop)</p>
+                                    </div>
+                                </div>
+                                <div class="vr-preview-display">
+                                    <img id="vrPreviewImage" alt="VR preview stream">
+                                    <div class="vr-preview-overlay" id="vrPreviewOverlay">Waiting for server...</div>
+                                </div>
+                            </div>
+                            <div class="vr-preview-panel">
+                                <div class="card-head" style="margin-bottom: 0;">
+                                    <div>
+                                        <h3>Headset Client</h3>
+                                        <p class="muted">A-Frame WebXR page</p>
+                                    </div>
+                                </div>
+                                <div class="vr-preview-display">
+                                    <iframe id="vrFrame" title="VR client"></iframe>
+                                    <div class="vr-preview-overlay" id="vrFrameOverlay">Server URL not set</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel-grid">
+                            <div class="panel-card" style="background: #252525;">
+                                <h3>Server Control</h3>
+                                <div class="vr-config-grid">
+                                    <label>Server URL
+                                        <input type="text" id="vrServerUrl" placeholder="http://localhost:5000">
+                                    </label>
+                                    <label>Mode
+                                        <select id="vrMode">
+                                            <option value="region">Region (crop)</option>
+                                            <option value="monitor">Full monitor</option>
+                                        </select>
+                                    </label>
+                                    <label>FPS
+                                        <input type="number" id="vrFps" min="1" max="60">
+                                    </label>
+                                    <label>Quality
+                                        <input type="number" id="vrQuality" min="10" max="95">
+                                    </label>
+                                </div>
+                                <div class="vr-button-row">
+                                    <button class="queue-btn" id="btn-start-server">Start Server (uv)</button>
+                                    <button class="queue-btn alt" id="btn-open-browser">Open in Browser</button>
+                                    <button class="pill-btn" id="btn-vr-save-host">Save Settings</button>
+                                </div>
+                                <div class="vr-meta">
+                                    <span>Launch script: <code>python_server/start_server.bat</code></span>
+                                    <span>Local IP: <code id="vrLocalIp">-</code></span>
+                                </div>
+                            </div>
+
+                            <div class="panel-card" style="background: #252525;">
+                                <h3>Capture Region (relative to monitor origin)</h3>
+                                <div class="vr-config-grid">
+                                    <label>Monitor
+                                        <select id="vrMonitorIndex"></select>
+                                    </label>
+                                    <label>Top (px)
+                                        <input type="number" id="vrTop" min="0">
+                                    </label>
+                                    <label>Left (px)
+                                        <input type="number" id="vrLeft" min="0">
+                                    </label>
+                                    <label>Width (px)
+                                        <input type="number" id="vrWidth" min="1">
+                                    </label>
+                                    <label>Height (px)
+                                        <input type="number" id="vrHeight" min="1">
+                                    </label>
+                                </div>
+                                <div class="vr-button-row">
+                                    <button class="pill-btn" id="btn-vr-seq-dims">Use Sequence Size</button>
+                                    <button class="queue-btn" id="btn-vr-apply">Send Settings to Server</button>
+                                </div>
+                                <p class="muted" id="vrConfigStatus">Adjust offsets so the crop matches the Program
+                                    Monitor window.</p>
+                            </div>
+
+                            <div class="panel-card" style="background: #252525;">
+                                <h3>Steps</h3>
+                                <ol style="font-size: 12px; color: #ccc; padding-left: 20px; line-height: 1.6;">
+                                    <li>Ensure <code>uv</code> is installed and click <strong>Start Server</strong>.
+                                    </li>
+                                    <li>Wait for the status above to turn green, then fine-tune the capture region.</li>
+                                    <li>Put on your headset and open the browser.</li>
+                                    <li>Visit <code id="local-ip-display">http://&lt;YOUR_PC_IP&gt;:5000</code> (or the
+                                        server URL you set).</li>
+                                </ol>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div id="dragthing" draggable="true" ondragstart="dragHandler(event)" class="ghost-drag">Drag and drop
-                import</div>
-        </div>
     </div>
 </body>
 

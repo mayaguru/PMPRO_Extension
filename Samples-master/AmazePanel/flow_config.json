@@ -12,5 +12,18 @@
       "path": "D:/_DEV/PremiereScripts/Scripts/05_Clean_InOut.jsx",
       "label": "05_Clean_InOut.jsx"
     }
-  ]
+  ],
+  "vr": {
+    "serverUrl": "http://localhost:5000",
+    "mode": "region",
+    "monitorIndex": 1,
+    "fps": 30,
+    "quality": 80,
+    "region": {
+      "top": 0,
+      "left": 0,
+      "width": 7680,
+      "height": 3840
+    }
+  }
 }

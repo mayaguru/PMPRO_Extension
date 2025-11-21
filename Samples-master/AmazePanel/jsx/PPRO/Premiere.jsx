@@ -181,6 +181,16 @@ $._PPP_={
 		}
 	},
 
+	getActiveSequenceFrameSize : function () {
+		if (app.project.activeSequence) {
+			var settings = app.project.activeSequence.getSettings();
+			if (settings) {
+				return settings.videoFrameWidth + "|" + settings.videoFrameHeight;
+			}
+		}
+		return "0|0";
+	},
+
 	projectPanelSelectionChanged : function (eventObj) { // Note: This message is also triggered when the user opens or creates a new project.
 		var message 		= "";
 		var projectItems	= eventObj;

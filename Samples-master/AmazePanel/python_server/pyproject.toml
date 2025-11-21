@@ -1,0 +1,11 @@
+[project]
+name = "vr-streamer"
+version = "0.1.0"
+description = "VR Streamer for Premiere Pro"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask",
+    "mss",
+    "pillow",
+]

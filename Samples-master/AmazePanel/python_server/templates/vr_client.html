@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Premiere VR Stream</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <!-- Optional: Stereo component for 3D video support -->
+    <script src="https://unpkg.com/aframe-stereo-component/dist/aframe-stereo-component.min.js"></script>
+
+    <style>
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 999;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            color: white;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="ui">
+        <h3>VR Stream Control</h3>
+        <button onclick="toggleStereo()">Toggle Stereo (SBS)</button>
+        <p id="vr-status">Waiting for server...</p>
+    </div>
+
+    <a-scene>
+        <a-assets>
+            <!-- The video feed from our Python server -->
+            <!-- We use an img tag because MJPEG is technically a sequence of images, 
+             but A-Frame handles it better as a texture on a plane -->
+            <img id="stream" src="/video_feed" crossorigin="anonymous">
+        </a-assets>
+
+        <!-- Camera -->
+        <a-entity camera look-controls wasd-controls position="0 1.6 0">
+            <!-- Left Eye Camera (for stereo) -->
+            <a-entity camera="active: false" stereo="eye:left"></a-entity>
+            <!-- Right Eye Camera (for stereo) -->
+            <a-entity camera="active: false" stereo="eye:right"></a-entity>
+        </a-entity>
+
+        <!-- Screen Plane -->
+        <!-- Positioned in front of the user -->
+        <a-plane id="screen-mono" src="#stream" position="0 1.6 -2" width="3.2" height="1.8" color="#FFF" shader="flat">
+        </a-plane>
+
+        <!-- Stereo Planes (Hidden by default) -->
+        <!-- Left Eye Image -->
+        <a-plane id="screen-left" visible="false" src="#stream" position="0 1.6 -2" width="3.2" height="1.8"
+            stereo="eye:left" shader="flat">
+            <!-- Adjust UVs for SBS Left: 0 to 0.5 -->
+        </a-plane>
+
+        <!-- Right Eye Image -->
+        <a-plane id="screen-right" visible="false" src="#stream" position="0 1.6 -2" width="3.2" height="1.8"
+            stereo="eye:right" shader="flat">
+            <!-- Adjust UVs for SBS Right: 0.5 to 1.0 -->
+        </a-plane>
+
+        <!-- Environment -->
+        <a-sky color="#111"></a-sky>
+    </a-scene>
+
+    <script>
+        function updateStatusText(text) {
+            var el = document.getElementById('vr-status');
+            if (el) {
+                el.textContent = text;
+            }
+        }
+
+        async function refreshServerStatus() {
+            try {
+                var response = await fetch('/health');
+                if (!response.ok) throw new Error('Request failed');
+                var payload = await response.json();
+                if (payload && payload.ip) {
+                    var bbox = payload.bbox || {};
+                    updateStatusText('PC IP ' + payload.ip + ' | Capture ' + (bbox.width || '?') + 'x' + (bbox.height || '?'));
+                } else {
+                    updateStatusText('Server running');
+                }
+            } catch (err) {
+                updateStatusText('Health check failed. Is the panel connected?');
+            }
+        }
+        refreshServerStatus();
+        setInterval(refreshServerStatus, 5000);
+
+        var isStereo = false;
+
+        function toggleStereo() {
+            isStereo = !isStereo;
+            var mono = document.querySelector('#screen-mono');
+            var left = document.querySelector('#screen-left');
+            var right = document.querySelector('#screen-right');
+
+            if (isStereo) {
+                mono.setAttribute('visible', false);
+                left.setAttribute('visible', true);
+                right.setAttribute('visible', true);
+
+                // Update UV mapping for SBS (Side-by-Side)
+                // A-Frame primitives don't easily expose UVs via attributes without a custom component or geometry manipulation.
+                // For a quick prototype, we might need a custom component or just assume the user can switch to a stereo mode in the video player if we were using a video tag.
+                // Since we are using an MJPEG stream (image), we need to map the texture coordinates.
+
+                updateUVs(left.object3DMap.mesh, 0, 0, 0.5, 1); // Left half
+                updateUVs(right.object3DMap.mesh, 0.5, 0, 1, 1); // Right half
+
+            } else {
+                mono.setAttribute('visible', true);
+                left.setAttribute('visible', false);
+                right.setAttribute('visible', false);
+            }
+        }
+
+        function updateUVs(mesh, uMin, vMin, uMax, vMax) {
+            if (!mesh || !mesh.geometry) return;
+            var uvAttribute = mesh.geometry.attributes.uv;
+
+            // Standard Plane Geometry UVs (usually 4 vertices for a simple plane)
+            // 0: (0,1), 1: (1,1), 2: (0,0), 3: (1,0) - Order depends on BufferGeometry construction
+            // Let's assume standard A-Frame plane (which is Three.js PlaneGeometry)
+
+            // This is a bit hacky for a generic plane, but let's try standard mapping
+            // Top-Left, Top-Right, Bottom-Left, Bottom-Right
+
+            const uvs = uvAttribute.array;
+
+            // We need to iterate and check. Or just create a custom geometry.
+            // For now, let's just log that we need to implement UV mapping properly or use a component.
+            // Actually, let's use the 'multisrc' or just geometry.faceVertexUvs if it was old three.js, but this is BufferGeometry.
+
+            // Simple hack: Just scale the texture repeat/offset if possible?
+            // A-Frame material has 'repeat' and 'offset' properties!
+            // material="src: #stream; repeat: 0.5 1; offset: 0 0" for Left
+            // material="src: #stream; repeat: 0.5 1; offset: 0.5 0" for Right
+
+            // Let's use that instead of direct mesh manipulation!
+        }
+
+        // Re-implement toggle using material properties
+        function toggleStereo() {
+            isStereo = !isStereo;
+            var mono = document.querySelector('#screen-mono');
+            var left = document.querySelector('#screen-left');
+            var right = document.querySelector('#screen-right');
+
+            if (isStereo) {
+                mono.setAttribute('visible', false);
+                left.setAttribute('visible', true);
+                right.setAttribute('visible', true);
+
+                // Left Eye: Left half of image
+                left.setAttribute('material', 'repeat: 0.5 1; offset: 0 0');
+
+                // Right Eye: Right half of image
+                right.setAttribute('material', 'repeat: 0.5 1; offset: 0.5 0');
+
+            } else {
+                mono.setAttribute('visible', true);
+                left.setAttribute('visible', false);
+                right.setAttribute('visible', false);
+            }
+        }
+    </script>
+</body>
+
+</html>
