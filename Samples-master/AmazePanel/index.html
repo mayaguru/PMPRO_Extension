@@ -297,6 +297,18 @@
             gap: 8px;
         }
 
+        #tab-settings .button-pair {
+            display: flex;
+            gap: 8px;
+        }
+
+        #tab-settings .button-pair button {
+            flex: 1;
+            padding: 6px 10px;
+            min-height: 32px;
+            font-size: 11px;
+        }
+
         button {
             background: #333;
             border: 1px solid #4a4a4a;
@@ -1053,8 +1065,10 @@
                         <span class="path-chip" id="flowPath">[not set]</span>
                     </div>
                     <div class="button-grid">
-                        <button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
-                        <button class="controlBg textStyle" id="clearFlow">Clear</button>
+                        <div class="button-pair">
+                            <button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
+                            <button class="controlBg textStyle" id="clearFlow">Clear</button>
+                        </div>
                     </div>
                 </div>
 
@@ -1066,15 +1080,19 @@
                         <span class="path-chip">Preset: <span id="renderPresetPath">[not set]</span></span>
                     </div>
                     <div class="button-grid">
-                        <button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
-                        <button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
+                        <div class="button-pair">
+                            <button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
+                            <button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
+                        </div>
                     </div>
                     <div class="path-row">
                         <span class="path-chip">Output: <span id="renderOutputPath">[not set]</span></span>
                     </div>
                     <div class="button-grid">
-                        <button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
-                        <button class="controlBg textStyle" id="clearRenderOutput">Clear output</button>
+                        <div class="button-pair">
+                            <button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
+                            <button class="controlBg textStyle" id="clearRenderOutput">Clear output</button>
+                        </div>
                     </div>
                 </div>
             </div>
