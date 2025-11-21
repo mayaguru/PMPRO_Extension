@@ -11,51 +11,54 @@
   "slots": [
     {
       "time": 0,
+      "duration": 600,
       "clips": {
-        "A": "TXTBClip100BranchA",
-        "B": "TXTBClip100BranchB",
-        "C": "TXTBClip100BranchC",
-        "D": "TXTBClip100BranchD",
-        "E": "TXTBClip100BranchE"
+        "A": { "name": "TXTBClip100BranchA", "duration": 600, "in": 0, "out": 600 },
+        "B": { "name": "TXTBClip100BranchB", "duration": 600, "in": 0, "out": 600 },
+        "C": { "name": "TXTBClip100BranchC", "duration": 600, "in": 0, "out": 600 },
+        "D": { "name": "TXTBClip100BranchD", "duration": 600, "in": 0, "out": 600 },
+        "E": { "name": "TXTBClip100BranchE", "duration": 600, "in": 0, "out": 600 }
       }
     },
     {
       "time": 600,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip120",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         }
       }
     },
     {
       "time": 1200,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip130branch2A",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "B": {
           "name": "TXTBClip130branch2B",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "C": {
           "name": "TXTBClip130branch2C",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "D": {
           "name": "TXTBClip130branch2D",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "E": {
           "name": "TXTBClip130branch2E",
@@ -67,91 +70,97 @@
     },
     {
       "time": 1800,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip140",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         }
       }
     },
     {
       "time": 2400,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip150",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         }
       }
     },
     {
       "time": 3000,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip160",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         }
       }
     },
     {
       "time": 3600,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip170",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         }
       }
     },
     {
       "time": 4200,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip180branch3A",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "B": {
           "name": "TXTBClip180branch3B",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "C": {
           "name": "TXTBClip180branch3C",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "D": {
           "name": "TXTBClip180branch3D",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         },
         "E": {
           "name": "TXTBClip180branch3E",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         }
       }
     },
     {
       "time": 4800,
+      "duration": 600,
       "clips": {
         "A": {
           "name": "TXTBClip190",
-          "duration": 600000,
+          "duration": 600,
           "in": 0,
-          "out": 600000
+          "out": 600
         }
       }
     }

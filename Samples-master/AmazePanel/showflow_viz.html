@@ -804,6 +804,7 @@
 
         function saveData() {
             if (!currentFilePath || !currentData) return;
+            normalizeData(currentData);
             var json = JSON.stringify(currentData, null, 2);
             var res = window.cep.fs.writeFile(currentFilePath, json);
             if (res.err === 0) {
@@ -858,30 +859,31 @@
         function getSlotDuration(data, idx) {
             if (!data || !data.slots || idx < 0 || idx >= data.slots.length) return 0;
             var slot = data.slots[idx];
-            if (slot && typeof slot.duration === "number" && !isNaN(slot.duration) && slot.duration > 0) {
-                return slot.duration;
-            }
             var nextSlot = data.slots[idx + 1];
             if (nextSlot && typeof slot.time === "number" && typeof nextSlot.time === "number") {
                 var diff = nextSlot.time - slot.time;
                 if (diff > 0) return diff;
+            }
+            if (slot && typeof slot.duration === "number" && !isNaN(slot.duration) && slot.duration > 0) {
+                return slot.duration;
             }
             return 600;
         }
 
         // Effective clip duration for display/layout (prefer trimmed range, then slot length, then clip duration)
         function getClipDuration(clipData, slotDuration) {
+            // Marker/slot length is authoritative for layout
+            if (slotDuration && !isNaN(slotDuration) && slotDuration > 0) return slotDuration;
             var trimmed = 0;
             if (clipData && typeof clipData === "object" && clipData.out !== undefined && clipData.in !== undefined) {
                 trimmed = Number(clipData.out) - Number(clipData.in);
                 if (isNaN(trimmed) || trimmed < 0) trimmed = 0;
             }
-            var fallbackSlot = (!slotDuration || isNaN(slotDuration) || slotDuration <= 0) ? 600 : slotDuration;
-            var base = trimmed > 0 ? trimmed : (clipData && typeof clipData === "object" && clipData.duration && !isNaN(clipData.duration) ? clipData.duration : fallbackSlot);
-            if (fallbackSlot > 0) {
-                return Math.min(base, fallbackSlot);
+            if (trimmed > 0) return trimmed;
+            if (clipData && typeof clipData === "object" && clipData.duration && !isNaN(clipData.duration)) {
+                return clipData.duration;
             }
-            return base;
+            return 600;
         }
 
         // Pick marker spacing (in frames) so labels do not overlap at current zoom
@@ -969,6 +971,7 @@
         }
 
         function render(data) {
+            if (data) normalizeData(data);
             if (isHorizontal) {
                 renderHorizontal(data);
             } else {
@@ -1503,6 +1506,27 @@
             render(currentData);
         }
 
+        // Normalize durations/outs so bad values don't corrupt layout or saves
+        function normalizeData(data) {
+            if (!data || !data.slots) return;
+            for (var s = 0; s < data.slots.length; s++) {
+                var slot = data.slots[s];
+                var slotDur = getSlotDuration(data, s);
+                if (!slotDur || isNaN(slotDur) || slotDur <= 0) slotDur = 600;
+                if (!slot.clips) continue;
+                Object.keys(slot.clips).forEach(function (key) {
+                    var c = slot.clips[key];
+                    if (!c) return;
+                    if (typeof c === "string") {
+                        slot.clips[key] = { name: c, duration: slotDur, in: 0, out: slotDur };
+                        return;
+                    }
+                    if (isNaN(c.duration) || c.duration <= 0) c.duration = slotDur;
+                    if (isNaN(c.out) || c.out <= 0) c.out = c.duration;
+                });
+            }
+        }
+
         function openMarkerList() {
             if (!currentData || !currentData.slots || currentData.slots.length === 0) return;
             var fps = currentData.fps || 60;
@@ -1556,12 +1580,17 @@
                 "var seq = app.project.activeSequence;\n" +
                 "var fps = 60;\n" +
                 "try{ if(seq.videoFrameRate && seq.videoFrameRate.seconds){ var f=1/Number(seq.videoFrameRate.seconds); if(f>0) fps=Math.round(f);} }catch(e){}\n" +
+                "var TICKS_PER_SECOND = 254016000000;\n" +
+                "function markerFrame(m){\n" +
+                "  if(m.start && m.start.ticks!==undefined){ return Math.round(Number(m.start.ticks)/(TICKS_PER_SECOND/fps)); }\n" +
+                "  if(m.start && m.start.seconds!==undefined){ return Math.round(Number(m.start.seconds)*fps); }\n" +
+                "  return 0;\n" +
+                "}\n" +
                 "var out=[];\n" +
                 "if(seq.markers && seq.markers.numMarkers>0){\n" +
                 "  var m=seq.markers.getFirstMarker();\n" +
                 "  while(m){\n" +
-                "    var tSec = (m.start && m.start.seconds)? Number(m.start.seconds):0;\n" +
-                "    var fr = Math.round(tSec*fps);\n" +
+                "    var fr = markerFrame(m);\n" +
                 "    out.push({frame:fr,name:(m.name||'')});\n" +
                 "    m=seq.markers.getNextMarker(m);\n" +
                 "  }\n" +
@@ -1577,19 +1606,58 @@
                     var markers = obj.markers || [];
                     if (markers.length === 0) { alert("No markers found in active sequence."); return; }
                     if (!currentData) currentData = {};
+                    var oldSlots = (currentData.slots || []).slice();
                     currentData.fps = obj.fps || 60;
-                    currentData.slots = [];
+                    if (!currentData.tracks || Object.keys(currentData.tracks).length === 0) {
+                        currentData.tracks = { "A": 0 };
+                    }
+                    var newSlots = [];
                     for (var i = 0; i < markers.length; i++) {
                         var start = markers[i].frame || 0;
                         var end = (i < markers.length - 1) ? markers[i + 1].frame : (start + 600);
                         if (end <= start) end = start + 1;
-                        currentData.slots.push({
-                            time: start,
-                            duration: end - start,
-                            name: markers[i].name || ("Marker " + (i + 1)),
-                            clips: {}
+                    var slot = {
+                        time: start,
+                        duration: end - start,
+                        name: markers[i].name || ("Marker " + (i + 1)),
+                        clips: {}
+                    };
+                    if (oldSlots[i] && oldSlots[i].clips) {
+                        slot.clips = JSON.parse(JSON.stringify(oldSlots[i].clips));
+                        // align clip durations with new slot duration if they were tiny defaults
+                        Object.keys(slot.clips).forEach(function (ck) {
+                            var clip = slot.clips[ck];
+                            if (!clip) return;
+                            if (typeof clip === "string") {
+                                slot.clips[ck] = { name: clip, duration: slot.duration, in: 0, out: slot.duration };
+                                return;
+                            }
+                            if (isNaN(clip.duration) || clip.duration <= 0 || clip.duration < slot.duration * 0.5) {
+                                clip.duration = slot.duration;
+                            }
+                            if (isNaN(clip.out) || clip.out <= 0 || clip.out < clip.duration * 0.5) {
+                                clip.out = clip.duration;
+                            }
                         });
                     }
+                    newSlots.push(slot);
+                }
+                    // Append any leftover old slots (keep clips) after the imported marker range
+                    var runningTime = markers.length > 0 ? (markers[markers.length - 1].frame || 0) + (newSlots[newSlots.length - 1].duration || 0) : 0;
+                    for (var j = markers.length; j < oldSlots.length; j++) {
+                        var os = oldSlots[j];
+                        var slotDur = getSlotDuration({ slots: oldSlots }, j);
+                        if (!slotDur || isNaN(slotDur) || slotDur <= 0) slotDur = 600;
+                        var extra = {
+                            time: runningTime,
+                            duration: slotDur,
+                            name: os && os.name ? os.name : ("Slot " + (j + 1)),
+                            clips: os && os.clips ? JSON.parse(JSON.stringify(os.clips)) : {}
+                        };
+                        runningTime += slotDur;
+                        newSlots.push(extra);
+                    }
+                    currentData.slots = newSlots;
                     render(currentData);
                     alert("Imported " + markers.length + " markers from sequence.");
                 } catch (e) {
