@@ -52,6 +52,12 @@
             border-color: #005a9e;
             color: white;
         }
+        
+        #controls button.active {
+            background: #d74e00;
+            border-color: #9e3a00;
+            color: white;
+        }
 
         #main-container {
             flex: 1;
@@ -80,32 +86,43 @@
         }
 
         .time-marker {
-            height: 120px; /* Fixed height for slot visualization */
+            height: 84px; /* Reduced to 70% of 120px */
             display: flex;
             flex-direction: column;
             justify-content: center;
-            font-size: 12px;
+            font-size: 11px; /* Slightly smaller font */
             color: #888;
             text-align: right;
+            position: relative;
         }
         
         .time-marker .dur {
-            font-size: 10px;
+            font-size: 9px;
             color: #555;
             margin-top: 4px;
         }
 
-        /* Track Columns Container */
-        .tracks-container {
-            display: flex;
-            gap: 20px;
+        /* Insert Row Button */
+        .insert-row-btn {
+            position: absolute;
+            top: -10px; /* Position between rows */
+            right: -25px; /* Adjust to sit on the line */
+            width: 20px;
+            height: 20px;
+            background: #444;
+            color: #fff;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.2s;
         }
-
-        .track-col {
-            display: flex;
-            flex-direction: column;
-            width: 200px;
-            min-width: 200px;
+        
+        .time-marker:hover .insert-row-btn {
+            opacity: 1;
         }
 
         .track-header {
@@ -118,12 +135,18 @@
         }
 
         .slot-cell {
-            height: 120px; /* Match time-marker height */
+            height: 84px; /* Match time-marker height (70%) */
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 5px;
             box-sizing: border-box;
+            border: 1px solid transparent; /* For drag over effect */
+        }
+        
+        .slot-cell.drag-over {
+            border: 1px dashed #0078d7;
+            background: rgba(0, 120, 215, 0.1);
         }
 
         .clip-card {
@@ -132,7 +155,7 @@
             border-radius: 6px;
             width: 100%;
             height: 90%;
-            padding: 10px;
+            padding: 5px; /* Reduced padding */
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
@@ -156,23 +179,40 @@
             opacity: 0.5;
         }
         
-        .clip-card.selected {
-            border-color: #0078d7;
-            background: #2b3c4d;
-        }
-
         .clip-name {
             font-weight: bold;
-            font-size: 13px;
+            font-size: 11px; /* Reduced font size */
             color: #fff;
             text-align: center;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
             word-break: break-all;
         }
 
         .clip-meta {
-            font-size: 11px;
+            font-size: 9px; /* Reduced font size */
             color: #aaa;
+        }
+        
+        /* Delete Button */
+        .delete-btn {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 16px;
+            height: 16px;
+            background: #d70000;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 14px;
+            font-size: 10px;
+            cursor: pointer;
+            display: none; /* Hidden by default */
+            border: 1px solid #fff;
+        }
+        
+        .edit-mode .delete-btn {
+            display: block;
         }
 
         /* Modal */
@@ -234,6 +274,7 @@
     <div id="header">
         <h1>Showflow Visual Editor</h1>
         <div id="controls">
+            <button onclick="toggleEditMode()" id="btn-edit-mode">Edit Mode</button>
             <button onclick="window.location.href='index.html'">Back</button>
             <button onclick="loadData()">Reload</button>
             <button class="primary" onclick="saveData()">Save Changes</button>
@@ -270,6 +311,7 @@
         var currentData = null;
         var currentFilePath = null;
         var editingTarget = null; // { slotIndex, trackKey }
+        var isEditMode = false;
 
         function getFlowConfigPath() {
             var osVersion = csInterface.getOSInformation();
@@ -322,6 +364,19 @@
             }
         }
 
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            var btn = document.getElementById("btn-edit-mode");
+            if (isEditMode) {
+                btn.classList.add("active");
+                document.body.classList.add("edit-mode");
+            } else {
+                btn.classList.remove("active");
+                document.body.classList.remove("edit-mode");
+            }
+            render(currentData);
+        }
+
         function framesToTimecode(frames, fps) {
             // Simple MM:SS:FF for now
             var totalSeconds = Math.floor(frames / fps);
@@ -369,6 +424,18 @@
                     timeCell.className = "time-marker";
                     timeCell.innerHTML = "<span>" + framesToTimecode(slot.time, fps) + "</span>" + 
                                          "<span class='dur'>Dur: " + slot.duration + "f</span>";
+                    
+                    // Insert Row Button (between rows)
+                    var insertBtn = document.createElement("div");
+                    insertBtn.className = "insert-row-btn";
+                    insertBtn.textContent = "+";
+                    insertBtn.title = "Insert Row Here";
+                    insertBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        insertSlot(sIdx);
+                    };
+                    timeCell.appendChild(insertBtn);
+
                     root.appendChild(timeCell);
 
                     // Track Cells
@@ -376,19 +443,47 @@
                         var cell = document.createElement("div");
                         cell.className = "slot-cell";
                         
+                        // Drag & Drop Events for Cell (Dropzone)
+                        cell.ondragover = function(e) {
+                            e.preventDefault(); // Allow drop
+                            cell.classList.add("drag-over");
+                        };
+                        cell.ondragleave = function(e) {
+                            cell.classList.remove("drag-over");
+                        };
+                        cell.ondrop = function(e) {
+                            e.preventDefault();
+                            cell.classList.remove("drag-over");
+                            var srcData = JSON.parse(e.dataTransfer.getData("text/plain"));
+                            moveClip(srcData.sIdx, srcData.trKey, sIdx, trKey);
+                        };
+
                         var clipData = slot.clips ? slot.clips[trKey] : null;
                         var card = document.createElement("div");
                         card.className = "clip-card" + (clipData ? "" : " empty");
                         
                         if (clipData) {
+                            // Draggable
+                            card.draggable = true;
+                            card.ondragstart = function(e) {
+                                e.dataTransfer.setData("text/plain", JSON.stringify({ sIdx: sIdx, trKey: trKey }));
+                                e.dataTransfer.effectAllowed = "move";
+                            };
+
                             var cName = clipData.name || clipData; // handle string or object
                             var cDur = clipData.duration || slot.duration;
                             
-                            card.innerHTML = "<div class='clip-name'>" + cName + "</div>" +
+                            var deleteBtnHTML = "";
+                            if (isEditMode) {
+                                deleteBtnHTML = "<div class='delete-btn' onclick='deleteClip(" + sIdx + ", \"" + trKey + "\", event)'>x</div>";
+                            }
+
+                            card.innerHTML = deleteBtnHTML + 
+                                             "<div class='clip-name'>" + cName + "</div>" +
                                              "<div class='clip-meta'>" + cDur + "f</div>";
                             
                             card.onclick = function() {
-                                openEdit(sIdx, trKey, clipData);
+                                if (!isEditMode) openEdit(sIdx, trKey, clipData);
                             };
                         } else {
                             card.innerHTML = "<div class='clip-meta'>+</div>";
@@ -405,6 +500,22 @@
                         root.appendChild(cell);
                     });
                 });
+                
+                // Add one final "Insert Row" button at the very bottom
+                var finalTimeCell = document.createElement("div");
+                finalTimeCell.className = "time-marker";
+                finalTimeCell.style.height = "20px"; // Small footer
+                var finalInsertBtn = document.createElement("div");
+                finalInsertBtn.className = "insert-row-btn";
+                finalInsertBtn.style.top = "0"; // Align to top of this footer
+                finalInsertBtn.textContent = "+";
+                finalInsertBtn.title = "Append Row";
+                finalInsertBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    insertSlot(data.slots.length);
+                };
+                finalTimeCell.appendChild(finalInsertBtn);
+                root.appendChild(finalTimeCell);
             }
         }
 
@@ -445,6 +556,69 @@
             }
             
             closeModal();
+            render(currentData);
+        }
+
+        function deleteClip(sIdx, trKey, e) {
+            e.stopPropagation();
+            if (!confirm("Delete this clip?")) return;
+            
+            var slot = currentData.slots[sIdx];
+            if (slot && slot.clips) {
+                delete slot.clips[trKey];
+                render(currentData);
+            }
+        }
+
+        function insertSlot(index) {
+            // Insert a new empty slot at the given index
+            var newSlot = {
+                time: 0, // Will need to recalculate times
+                duration: 600, // Default duration
+                clips: {}
+            };
+            
+            // Insert
+            currentData.slots.splice(index, 0, newSlot);
+            
+            // Recalculate times for all slots
+            var runningTime = 0;
+            currentData.slots.forEach(function(s) {
+                s.time = runningTime;
+                runningTime += (s.duration || 0);
+            });
+            
+            render(currentData);
+        }
+
+        function moveClip(srcIdx, srcTrKey, destIdx, destTrKey) {
+            if (srcIdx === destIdx && srcTrKey === destTrKey) return;
+
+            var srcSlot = currentData.slots[srcIdx];
+            var destSlot = currentData.slots[destIdx];
+            
+            if (!srcSlot || !srcSlot.clips || !srcSlot.clips[srcTrKey]) return;
+            
+            var clipToMove = srcSlot.clips[srcTrKey];
+            
+            // Check destination
+            if (!destSlot.clips) destSlot.clips = {};
+            
+            // If destination is occupied, swap? Or overwrite? 
+            // Let's just overwrite for now, or maybe alert if occupied?
+            // User asked to "move", usually implies to empty spot. 
+            // If we swap, it's safer.
+            var destClip = destSlot.clips[destTrKey];
+            
+            // Move (Swap)
+            destSlot.clips[destTrKey] = clipToMove;
+            
+            if (destClip) {
+                srcSlot.clips[srcTrKey] = destClip;
+            } else {
+                delete srcSlot.clips[srcTrKey];
+            }
+            
             render(currentData);
         }
 
