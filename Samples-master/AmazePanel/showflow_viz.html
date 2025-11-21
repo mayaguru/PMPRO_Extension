@@ -1186,6 +1186,105 @@
             refreshSelectionStyles();
         }
 
+        function setClipNameFromText(sIdx, trKey, newName) {
+            if (!currentData || !currentData.slots) return false;
+            if (!newName && newName !== "") return false;
+            var slot = currentData.slots[sIdx];
+            if (!slot || !slot.clips || !slot.clips[trKey]) return false;
+            var clip = slot.clips[trKey];
+            var trimmed = String(newName).trim();
+            if (trimmed.length === 0) return false;
+            if (typeof clip === "string") {
+                slot.clips[trKey] = trimmed;
+            } else if (typeof clip === "object") {
+                clip.name = trimmed;
+            } else {
+                slot.clips[trKey] = trimmed;
+            }
+            return true;
+        }
+
+        function sortedSelectedClipKeys() {
+            if (!selectedClips) return [];
+            var keys = Object.keys(selectedClips);
+            if (!keys.length) return keys;
+            var trackOrder = currentData && currentData.tracks ? currentData.tracks : {};
+            return keys.sort(function (a, b) {
+                var aParts = a.split("__");
+                var bParts = b.split("__");
+                var aIdx = parseInt(aParts[0], 10) || 0;
+                var bIdx = parseInt(bParts[0], 10) || 0;
+                if (aIdx !== bIdx) return aIdx - bIdx;
+                var aTrack = aParts[1] || "";
+                var bTrack = bParts[1] || "";
+                var aOrder = (trackOrder[aTrack] !== undefined) ? trackOrder[aTrack] : aTrack.charCodeAt(0);
+                var bOrder = (trackOrder[bTrack] !== undefined) ? trackOrder[bTrack] : bTrack.charCodeAt(0);
+                if (aOrder !== bOrder) return aOrder - bOrder;
+                return aTrack.localeCompare(bTrack);
+            });
+        }
+
+        function applyPastedNamesToSelectedClips(rawText) {
+            if (!rawText || !currentData || !currentData.slots) return false;
+            var keys = sortedSelectedClipKeys();
+            if (!keys.length) return false;
+            var trimmedRaw = rawText.trim();
+            if (!trimmedRaw) return false;
+
+            if (keys.length === 1) {
+                var singleParts = keys[0].split("__");
+                var singleIdx = parseInt(singleParts[0], 10);
+                var singleTrack = singleParts[1];
+                if (isNaN(singleIdx) || !singleTrack) return false;
+                if (setClipNameFromText(singleIdx, singleTrack, trimmedRaw)) {
+                    render(currentData);
+                    return true;
+                }
+                return false;
+            }
+
+            var segments = rawText.split(/\r?\n|[\t]/).map(function (seg) {
+                return seg.trim();
+            }).filter(function (seg) { return seg.length > 0; });
+            if (!segments.length) return false;
+
+            var applied = 0;
+            for (var i = 0; i < keys.length && applied < segments.length; i++) {
+                var parts = keys[i].split("__");
+                var sIdx = parseInt(parts[0], 10);
+                var trKey = parts[1];
+                if (isNaN(sIdx) || !trKey) continue;
+                if (setClipNameFromText(sIdx, trKey, segments[applied])) {
+                    applied++;
+                }
+            }
+
+            if (applied > 0) {
+                render(currentData);
+                return true;
+            }
+            return false;
+        }
+
+        function handleClipNamePaste(e) {
+            if (!selectedClips || !currentData) return;
+            if (e.target) {
+                var tag = e.target.tagName;
+                if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
+            }
+            if (!Object.keys(selectedClips).length) return;
+            var text = "";
+            if (e.clipboardData && typeof e.clipboardData.getData === "function") {
+                text = e.clipboardData.getData("text/plain");
+            } else if (window.clipboardData && typeof window.clipboardData.getData === "function") {
+                text = window.clipboardData.getData("Text");
+            }
+            if (!text) return;
+            if (applyPastedNamesToSelectedClips(text)) {
+                e.preventDefault();
+            }
+        }
+
         function setInOutFromClip(sIdx, trKey) {
             if (!currentData || !currentData.slots || !currentData.slots[sIdx]) return;
             computeEndFrame(currentData);
@@ -2667,6 +2766,7 @@
             });
         });
 
+        document.addEventListener("paste", handleClipNamePaste);
     </script>
 </body>
 
