@@ -1583,13 +1583,15 @@
             var slotStart = slotStartOverride !== undefined ? slotStartOverride : (slot.time || 0);
 
             cell.ondragover = function (e) {
+                if (!isEditMode) return;
                 e.preventDefault();
                 cell.classList.add("drag-over");
             };
-            cell.ondragleave = function (e) {
+            cell.ondragleave = function () {
                 cell.classList.remove("drag-over");
             };
             cell.ondrop = function (e) {
+                if (!isEditMode) return;
                 e.preventDefault();
                 cell.classList.remove("drag-over");
                 var srcData = JSON.parse(e.dataTransfer.getData("text/plain"));
@@ -1601,8 +1603,9 @@
             card.className = "clip-card" + (clipData ? "" : " empty");
 
             if (clipData) {
-                card.draggable = true;
+                card.draggable = isEditMode;
                 card.ondragstart = function (e) {
+                    if (!isEditMode) return;
                     e.dataTransfer.setData("text/plain", JSON.stringify({ sIdx: sIdx, trKey: trKey }));
                     e.dataTransfer.effectAllowed = "move";
                 };
@@ -1627,6 +1630,7 @@
             } else {
                 card.innerHTML = "<div class='clip-meta'>+</div>";
                 card.ondblclick = function () {
+                    if (!isEditMode) return;
                     var newDur = slotDur || 600;
                     var newClip = { name: "NewClip", duration: newDur, in: 0, out: newDur };
                     if (!slot.clips) slot.clips = {};
