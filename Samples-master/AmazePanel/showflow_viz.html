@@ -47,8 +47,43 @@
 
         #controls {
             display: flex;
-            align-items: center;
+            flex-direction: column;
             gap: 8px;
+            width: 100%;
+        }
+
+        .control-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .primary-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .secondary-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+        }
+
+        .large-btn {
+            padding: 10px 18px;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: 6px;
+        }
+
+        #render-selected-btn:disabled {
+            background: #444 !important;
+            border-color: #333 !important;
+            color: #888 !important;
+            cursor: not-allowed;
         }
 
         .slider-control {
@@ -57,25 +92,40 @@
             gap: 5px;
             font-size: 11px;
             color: #aaa;
-            background: #1e1e1e;
-            padding: 2px 8px;
-            border-radius: 4px;
-            border: 1px solid #444;
         }
 
         .slider-control input[type=range] {
-            width: 80px;
+            width: 90px;
             cursor: pointer;
+        }
+
+        .metric-controls {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-end;
+            background: rgba(30, 30, 30, 0.95);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 8px 12px;
+            z-index: 400;
         }
 
         #controls button {
             background: #3a3a3a;
             border: 1px solid #555;
             color: #ddd;
-            padding: 4px 8px;
+            padding: 6px 12px;
             cursor: pointer;
             font-size: 11px;
-            border-radius: 3px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 30px;
         }
 
         #controls button:hover {
@@ -768,29 +818,21 @@
     <div id="header">
         <h1>Showflow Visual Editor</h1>
         <div id="controls">
-            <div class="slider-control" id="zoom-control" style="display:none;">
-                <label title="Timeline Zoom">Zoom</label>
-                <input type="range" id="zoom-slider" min="0.2" max="1.5" step="0.1" value="1">
+            <div class="control-row">
+                <div class="primary-controls">
+                    <button onclick="toggleLayout()" id="btn-layout" class="large-btn">Timeline View</button>
+                    <button onclick="toggleEditMode()" id="btn-edit-mode" class="large-btn">Edit Mode</button>
+                    <button id="render-selected-btn" onclick="renderSelectedClips()" class="large-btn" disabled>Render Selected</button>
+                </div>
+                <div class="secondary-controls">
+                    <button onclick="newFlowFromTemplate()">New Flow</button>
+                    <button onclick="saveFlowAs()">Save As</button>
+                    <button onclick="addTrack()">Add Track</button>
+                    <button onclick="openMarkerList()">Edit Markers</button>
+                    <button onclick="loadData()">Reload</button>
+                    <button class="primary" onclick="saveData()">Save Changes</button>
+                </div>
             </div>
-            <div class="slider-control" id="width-control">
-                <label title="Card Width">W</label>
-                <input type="range" id="width-slider" min="100" max="240" step="5" value="150">
-            </div>
-            <div class="slider-control" id="height-control">
-                <label title="Track Height">H</label>
-                <input type="range" id="height-slider" min="40" max="100" value="50">
-            </div>
-            <button onclick="newFlowFromTemplate()">New Flow</button>
-            <button onclick="saveFlowAs()">Save As</button>
-            <button onclick="toggleLayout()" id="btn-layout">Timeline View</button>
-            <button onclick="toggleEditMode()" id="btn-edit-mode">Edit Mode</button>
-            <button onclick="addTrack()">Add Track</button>
-            <button onclick="openMarkerList()">Edit Markers</button>
-            <button onclick="window.location.href='index.html'">Back</button>
-            <button onclick="loadData()">Reload</button>
-            <button class="primary" onclick="saveData()">Save Changes</button>
-            <button id="render-selected-btn" onclick="renderSelectedClips()" disabled
-                style="background:#d74e00;border-color:#b34000;color:#fff;font-weight:700;">Render Selected</button>
         </div>
     </div>
 
@@ -814,6 +856,21 @@
     <div id="main-container">
         <div class="timeline-grid" id="grid-root">
             <!-- Dynamic Content -->
+        </div>
+    </div>
+
+    <div id="metric-controls" class="metric-controls">
+        <div class="slider-control" id="zoom-control" style="display:none;">
+            <label title="Timeline Zoom">Zoom</label>
+            <input type="range" id="zoom-slider" min="0.2" max="1.5" step="0.1" value="1">
+        </div>
+        <div class="slider-control" id="width-control">
+            <label title="Card Width">W</label>
+            <input type="range" id="width-slider" min="100" max="240" step="5" value="150">
+        </div>
+        <div class="slider-control" id="height-control">
+            <label title="Track Height">H</label>
+            <input type="range" id="height-slider" min="40" max="100" value="50">
         </div>
     </div>
 
