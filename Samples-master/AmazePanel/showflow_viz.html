@@ -72,6 +72,161 @@
             justify-content: flex-start;
         }
 
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        #file-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #ddd;
+        }
+
+        #current-filename {
+            font-weight: bold;
+        }
+
+        #save-indicator {
+            color: #4CAF50;
+            font-size: 14px;
+            transition: color 0.2s ease, opacity 0.2s ease;
+        }
+
+        #save-indicator.unsaved {
+            color: #ff9800;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        #save-text {
+            font-size: 12px;
+        }
+
+        #last-backup {
+            color: #999;
+            font-size: 11px;
+        }
+
+        @keyframes pulse {
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        .backup-frequency {
+            font-size: 11px;
+            color: #aaa;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .backup-frequency select {
+            background: #2d2d2d;
+            border: 1px solid #555;
+            color: #ddd;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .secondary-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .secondary-btn.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .backup-section {
+            margin-top: 8px;
+            background: #1f1f1f;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .backup-section .backup-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .backup-section .backup-actions .auto-backup-status {
+            font-size: 12px;
+            color: #8ecbff;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .backup-list-wrapper {
+            border-top: 1px solid #333;
+            padding-top: 8px;
+        }
+
+        .backup-list-title {
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 4px;
+        }
+
+        #backup-list {
+            max-height: 120px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .backup-entry {
+            font-size: 11px;
+            color: #ccc;
+            background: #262626;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 4px 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .backup-entry .path {
+            color: #888;
+            margin-left: 12px;
+            font-size: 10px;
+        }
+
+        .backup-entry.manual {
+            border-color: #4CAF50;
+        }
+
+        .backup-entry.auto {
+            border-color: #ff9800;
+        }
+
+        .backup-entry.empty {
+            justify-content: center;
+            color: #666;
+            border-style: dashed;
+        }
+
         .large-btn {
             padding: 10px 18px;
             font-size: 12px;
@@ -864,6 +1019,22 @@
     <div id="header">
         <h1>Showflow Visual Editor</h1>
         <div id="controls">
+            <div class="status-row">
+                <div id="file-status">
+                    <span id="current-filename">No file loaded</span>
+                    <span id="save-indicator">●</span>
+                    <span id="save-text">Saved</span>
+                    <span id="last-backup"></span>
+                </div>
+                <label class="backup-frequency">Backup every:
+                    <select id="backup-interval-select" onchange="setBackupInterval(parseInt(this.value, 10))">
+                        <option value="1">1 min</option>
+                        <option value="5" selected>5 min</option>
+                        <option value="10">10 min</option>
+                        <option value="30">30 min</option>
+                    </select>
+                </label>
+            </div>
             <div class="control-row">
                 <div class="primary-controls">
                     <button onclick="toggleLayout()" id="btn-layout" class="large-btn">Timeline View</button>
@@ -880,6 +1051,17 @@
                     <button onclick="openMarkerList()">Edit Markers</button>
                     <button onclick="loadData()">Reload</button>
                     <button class="primary" onclick="saveData()">Save Changes</button>
+                </div>
+            </div>
+            <div class="backup-section">
+                <div class="backup-actions">
+                    <span class="auto-backup-status">🔄 Auto-backup: Always ON</span>
+                    <button onclick="saveBackup(true)" class="secondary-btn" title="Manual backup">💾 Backup Now</button>
+                    <button onclick="restoreFromBackup()" class="secondary-btn" title="Restore from .backup file">⏮ Restore Backup</button>
+                </div>
+                <div class="backup-list-wrapper">
+                    <div class="backup-list-title">Recent backups (session)</div>
+                    <div id="backup-list"></div>
                 </div>
             </div>
         </div>
@@ -992,9 +1174,221 @@
         var historyEnabled = true;
         var marqueeEl = null;
         var marqueeState = null;
+        var originalDataHash = null;
+        var hasUnsavedChanges = false;
+        var autoBackupInterval = null;
+        var autoBackupEnabled = true;
+        var backupIntervalMinutes = 5;
+        var lastBackupHash = null;
+        var backupHistory = [];
+        var maxBackupHistory = 10;
 
         function clipKey(sIdx, trKey) {
             return sIdx + "__" + trKey;
+        }
+
+        function computeDataHash(data) {
+            if (!data) return "";
+            try {
+                return JSON.stringify(data);
+            } catch (e) {
+                return "";
+            }
+        }
+
+        function fileNameOnly(path) {
+            if (!path) return "";
+            var parts = path.split(/[\\/]/);
+            return parts[parts.length - 1] || path;
+        }
+
+        function checkDataChanged() {
+            if (!currentData || originalDataHash === null) return false;
+            var currentHash = computeDataHash(currentData);
+            return currentHash !== originalDataHash;
+        }
+
+        function updateSaveStatus(saved) {
+            var indicator = document.getElementById("save-indicator");
+            var text = document.getElementById("save-text");
+            hasUnsavedChanges = !saved;
+            if (indicator) {
+                if (saved) {
+                    indicator.classList.remove("unsaved");
+                } else {
+                    indicator.classList.add("unsaved");
+                }
+            }
+            if (text) {
+                text.textContent = saved ? "Saved" : "Unsaved";
+            }
+        }
+
+        function updateFilenameDisplay() {
+            var el = document.getElementById("current-filename");
+            if (!el) return;
+            if (currentFilePath) {
+                var parts = currentFilePath.split(/[\\/]/);
+                el.textContent = parts[parts.length - 1];
+            } else {
+                el.textContent = "No file loaded";
+            }
+        }
+
+        function recordBackupHistory(entry) {
+            entry.displayPath = fileNameOnly(entry.path || "");
+            backupHistory.unshift(entry);
+            if (backupHistory.length > maxBackupHistory) {
+                backupHistory.pop();
+            }
+            renderBackupHistory();
+        }
+
+        function renderBackupHistory() {
+            var list = document.getElementById("backup-list");
+            if (!list) return;
+            if (!backupHistory.length) {
+                list.innerHTML = "<div class='backup-entry empty'>No backups yet.</div>";
+                return;
+            }
+            var html = backupHistory.map(function (item) {
+                return "<div class='backup-entry " + item.mode + "'>" +
+                    "<span>" + item.label + "</span>" +
+                    "<span class='path' title='" + (item.path || "") + "'>" + (item.displayPath || item.path || "") + "</span>" +
+                    "</div>";
+            }).join("");
+            list.innerHTML = html;
+        }
+
+        function resetBackupHistory() {
+            backupHistory = [];
+            renderBackupHistory();
+        }
+
+        function refreshSaveStatusFromData() {
+            if (!currentData || originalDataHash === null) return;
+            var changed = checkDataChanged();
+            updateSaveStatus(!changed);
+        }
+
+        function getBackupFilePath() {
+            if (!currentFilePath) return null;
+            if (/\.json$/i.test(currentFilePath)) {
+                return currentFilePath.replace(/\.json$/i, ".backup.json");
+            }
+            return currentFilePath + ".backup.json";
+        }
+
+        function startAutoBackup() {
+            if (autoBackupInterval) {
+                clearInterval(autoBackupInterval);
+                autoBackupInterval = null;
+            }
+            if (!autoBackupEnabled) return;
+            var minutes = Math.max(1, Number(backupIntervalMinutes) || 1);
+            autoBackupInterval = setInterval(function () {
+                if (!currentFilePath || !currentData) return;
+                if (!hasUnsavedChanges) return;
+                saveBackup(false);
+            }, minutes * 60 * 1000);
+            console.log("Auto-backup started: every " + minutes + " minute(s)");
+        }
+
+        function saveBackup(force) {
+            if (!currentFilePath || !currentData) return;
+            var backupPath = getBackupFilePath();
+            if (!backupPath) return;
+            var currentHash = computeDataHash(currentData);
+            if (!force && lastBackupHash === currentHash) {
+                return;
+            }
+            var normalized = JSON.parse(JSON.stringify(currentData));
+            normalizeData(normalized);
+            var jsonStr = JSON.stringify(normalized, null, 2);
+            var jsx = "(function(){\n" +
+                "var f = new File(decodeURIComponent('" + encodeURIComponent(backupPath) + "'));\n" +
+                "f.encoding = 'UTF-8';\n" +
+                "if(!f.open('w')){return 'Error opening file';}\n" +
+                "f.write(decodeURIComponent('" + encodeURIComponent(jsonStr) + "'));\n" +
+                "f.close();\n" +
+                "return 'ok';\n" +
+                "})();";
+            csInterface.evalScript(jsx, function (res) {
+                if (res === 'ok') {
+                    lastBackupHash = currentHash;
+                    var label = document.getElementById("last-backup");
+                    var now = new Date();
+                    var hours = now.getHours();
+                    var minutes = now.getMinutes();
+                    var hStr = hours < 10 ? "0" + hours : String(hours);
+                    var mStr = minutes < 10 ? "0" + minutes : String(minutes);
+                    var timestampLabel = hStr + ":" + mStr;
+                    if (label) {
+                        label.textContent = "Last backup: " + timestampLabel;
+                    }
+                    recordBackupHistory({
+                        label: (force ? "Manual" : "Auto") + " · " + timestampLabel,
+                        path: backupPath,
+                        mode: force ? "manual" : "auto"
+                    });
+                    console.log("Backup saved: " + backupPath);
+                } else {
+                    console.error("Backup failed:", res);
+                }
+            });
+        }
+
+        function setBackupInterval(minutes) {
+            var clamped = parseInt(minutes, 10);
+            if (isNaN(clamped)) return;
+            clamped = Math.max(1, Math.min(60, clamped));
+            backupIntervalMinutes = clamped;
+            var select = document.getElementById("backup-interval-select");
+            if (select && parseInt(select.value, 10) !== clamped) {
+                select.value = String(clamped);
+            }
+            if (autoBackupEnabled) {
+                startAutoBackup();
+            }
+        }
+
+        function restoreFromBackup() {
+            if (!currentFilePath) {
+                alert("No file loaded.");
+                return;
+            }
+            var backupPath = getBackupFilePath();
+            if (!backupPath) return;
+            if (!confirm("Restore from backup?\n\nThis will replace current unsaved changes.\n\nBackup: " + backupPath)) {
+                return;
+            }
+            var jsx = "(function(){\n" +
+                "var f = new File(decodeURIComponent('" + encodeURIComponent(backupPath) + "'));\n" +
+                "if(!f.exists){return JSON.stringify({error:'Backup file not found'});}\n" +
+                "f.encoding = 'UTF-8';\n" +
+                "if(!f.open('r')){return JSON.stringify({error:'Cannot open backup'});}\n" +
+                "var content = f.read();\n" +
+                "f.close();\n" +
+                "return JSON.stringify({data: content});\n" +
+                "})();";
+            csInterface.evalScript(jsx, function (res) {
+                try {
+                    var result = JSON.parse(res || "{}");
+                    if (result.error) {
+                        alert(result.error);
+                        return;
+                    }
+                    currentData = JSON.parse(result.data);
+                    clearHistory();
+                    lastBackupHash = null;
+                    render(currentData);
+                    updateSaveStatus(false);
+                    startAutoBackup();
+                    alert("Backup restored successfully.");
+                } catch (e) {
+                    alert("Failed to restore backup: " + e);
+                }
+            });
         }
 
         function pushHistory(actionName, snapshotData) {
@@ -1013,6 +1407,7 @@
 
             redoStack = [];
             updateUndoRedoButtons();
+            updateSaveStatus(false);
         }
 
         function undo() {
@@ -1035,6 +1430,7 @@
             historyEnabled = true;
             updateUndoRedoButtons();
             console.log("Undo: " + previous.action);
+            refreshSaveStatusFromData();
         }
 
         function redo() {
@@ -1057,6 +1453,7 @@
             historyEnabled = true;
             updateUndoRedoButtons();
             console.log("Redo: " + next.action);
+            refreshSaveStatusFromData();
         }
 
         function updateUndoRedoButtons() {
@@ -1665,10 +2062,12 @@
             var cfg = readFlowConfig();
             if (!cfg.flowPath) {
                 alert("No Flow Path set in config.");
+                updateFilenameDisplay();
                 return;
             }
 
             currentFilePath = cfg.flowPath;
+            updateFilenameDisplay();
 
             var flowRes = window.cep.fs.readFile(currentFilePath);
             if (flowRes.err !== 0) {
@@ -1680,6 +2079,13 @@
                 currentData = JSON.parse(flowRes.data);
                 clearHistory();
                 render(currentData);
+                resetBackupHistory();
+                originalDataHash = computeDataHash(currentData);
+                lastBackupHash = null;
+                updateSaveStatus(true);
+                var label = document.getElementById("last-backup");
+                if (label) label.textContent = "";
+                startAutoBackup();
             } catch (e) {
                 alert("Error parsing JSON: " + e);
             }
@@ -1687,10 +2093,15 @@
 
         function saveData() {
             if (!currentFilePath || !currentData) return;
-            normalizeData(currentData);
-            var json = JSON.stringify(currentData, null, 2);
+            var normalized = JSON.parse(JSON.stringify(currentData));
+            normalizeData(normalized);
+            var json = JSON.stringify(normalized, null, 2);
             var res = window.cep.fs.writeFile(currentFilePath, json);
             if (res.err === 0) {
+                currentData = normalized;
+                originalDataHash = computeDataHash(currentData);
+                lastBackupHash = originalDataHash;
+                updateSaveStatus(true);
                 alert("Saved successfully!");
             } else {
                 alert("Error saving file: " + res.err);
@@ -1699,7 +2110,8 @@
 
         function saveFlowAs(suggestedName) {
             if (!currentData) currentData = JSON.parse(JSON.stringify(defaultFlowTemplate));
-            normalizeData(currentData);
+            var normalized = JSON.parse(JSON.stringify(currentData));
+            normalizeData(normalized);
             var path = pickSavePath(suggestedName);
             if (!path) {
                 alert("No path chosen. Flow not saved.");
@@ -1707,11 +2119,20 @@
             }
             if (!/\.json$/i.test(path)) path += ".json";
 
-            var json = JSON.stringify(currentData, null, 2);
+            var json = JSON.stringify(normalized, null, 2);
             var res = window.cep.fs.writeFile(path, json);
             if (res.err === 0) {
                 currentFilePath = path;
+                currentData = normalized;
                 setFlowPath(path);
+                resetBackupHistory();
+                originalDataHash = computeDataHash(currentData);
+                lastBackupHash = originalDataHash;
+                updateSaveStatus(true);
+                updateFilenameDisplay();
+                var label = document.getElementById("last-backup");
+                if (label) label.textContent = "";
+                startAutoBackup();
                 alert("Saved to " + path);
             } else {
                 alert("Error saving file: " + res.err);
@@ -1724,6 +2145,18 @@
             fresh.showId = "showflow_" + Date.now();
             currentData = fresh;
             currentFilePath = null;
+            originalDataHash = null;
+            lastBackupHash = null;
+            updateSaveStatus(false);
+            updateFilenameDisplay();
+            clearHistory();
+            resetBackupHistory();
+            if (autoBackupInterval) {
+                clearInterval(autoBackupInterval);
+                autoBackupInterval = null;
+            }
+            var label = document.getElementById("last-backup");
+            if (label) label.textContent = "";
             render(currentData);
             // Immediately prompt for a save location so config picks up the new file
             saveFlowAs(fresh.showId + ".showflow.json");
@@ -1949,6 +2382,11 @@
                 renderVertical(data);
             }
             refreshSelectionStyles();
+            if (!hasUnsavedChanges && originalDataHash !== null) {
+                if (checkDataChanged()) {
+                    updateSaveStatus(false);
+                }
+            }
         }
 
         function deleteTrack(trKey) {
@@ -3076,6 +3514,13 @@
                 document.documentElement.style.setProperty('--card-height', height + 'px');
             });
 
+            updateFilenameDisplay();
+            updateSaveStatus(true);
+            var intervalSelect = document.getElementById("backup-interval-select");
+            if (intervalSelect) {
+                intervalSelect.value = String(backupIntervalMinutes);
+            }
+            renderBackupHistory();
             updateUndoRedoButtons();
             loadData();
             startPlayheadPoll();
