@@ -24,6 +24,57 @@
 	<script src="./lib/jquery-1.9.1.js"></script>
 	<script src="./lib/Vulcan.js"></script>
 	<link id="ppstyle" href="css/style.css" rel="stylesheet" type="text/css">
+	<style>
+		/* Emphasize render queue buttons */
+		.render-queue {
+			margin-top: 12px;
+			border: 1px solid #3c3c3c;
+			border-radius: 6px;
+			padding: 12px 14px 16px;
+			background: #181818;
+			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		}
+
+		.render-queue h2 {
+			margin-top: 0;
+			margin-bottom: 12px;
+		}
+
+		.queue-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+
+		.queue-btn {
+			min-width: 220px;
+			padding: 12px 16px;
+			font-weight: 700;
+			font-size: 14px;
+			background: linear-gradient(135deg, #2e8bff, #1f6ad7);
+			border: 1px solid #0f4fb2;
+			border-radius: 8px;
+			color: #fff;
+			cursor: pointer;
+			transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.1s ease;
+		}
+
+		.queue-btn.alt {
+			background: linear-gradient(135deg, #ff9b42, #ff7a18);
+			border: 1px solid #d95f00;
+		}
+
+		.queue-btn:hover {
+			transform: translateY(-1px);
+			box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+			opacity: 0.95;
+		}
+
+		.queue-btn:active {
+			transform: translateY(0);
+			box-shadow: none;
+		}
+	</style>
 	<script type="text/javascript">
 		$(document).ready(function () {
 
@@ -589,8 +640,14 @@
 		<p>Output folder: <span id="renderOutputPath">[not set]</span></p>
 		<button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
 		<button class="controlBg textStyle" id="clearRenderOutput">Clear output</button>
-		<button class="controlBg textStyle" id="run_RenderSelected">Render active sequence</button>
-		<button class="controlBg textStyle" id="run_QueueMarkersToAME">Queue Markers to AME</button>
+	</div>
+
+	<div class="group render-queue">
+		<h2>Render queue</h2>
+		<div class="queue-actions">
+			<button class="queue-btn" id="run_RenderSelected">Render active sequence</button>
+			<button class="queue-btn alt" id="run_QueueMarkersToAME">Queue Markers to AME</button>
+		</div>
 	</div>
 
 	<div>
