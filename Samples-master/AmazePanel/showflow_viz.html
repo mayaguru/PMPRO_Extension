@@ -1668,6 +1668,7 @@
         }
 
         function startRulerScrub(e) {
+            if (e.button === 1) return; // Ignore middle click (pan)
             e.preventDefault();
             updateRulerScrub(e);
             rulerDrag = true;
@@ -2048,6 +2049,80 @@
 
             loadData();
             startPlayheadPoll();
+
+            // Keyboard Shortcuts
+            document.addEventListener("keydown", function (e) {
+                if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+                var key = e.key.toLowerCase();
+                if (key === "a") {
+                    setPlayheadFrame(playheadFrame - 1, true);
+                } else if (key === "d") {
+                    setPlayheadFrame(playheadFrame + 1, true);
+                } else if (key === "s") {
+                    // Toggle playback (Try to use QE or just Stop)
+                    // For now, we'll just stop by re-setting position, which usually halts playback in PPro
+                    setPlayheadFrame(playheadFrame, true);
+                }
+            });
+
+            // Mouse Navigation
+            var container = document.getElementById("main-container");
+
+            // Zoom with Wheel
+            container.addEventListener("wheel", function (e) {
+                e.preventDefault();
+
+                if (isHorizontal) {
+                    var delta = e.deltaY > 0 ? 0.9 : 1.1;
+                    var newScale = timelineScale * delta;
+                    newScale = Math.max(0.1, Math.min(5.0, newScale));
+                    timelineScale = newScale;
+                    document.getElementById("zoom-slider").value = timelineScale;
+                    document.documentElement.style.setProperty('--timeline-scale', timelineScale);
+                    render(currentData);
+                } else {
+                    // Vertical Mode: Zoom = Adjust Card Width
+                    var currentW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--card-width'), 10) || 150;
+                    var deltaW = e.deltaY > 0 ? -10 : 10; // Down=Shrink, Up=Grow
+                    var newW = Math.max(100, Math.min(400, currentW + deltaW));
+
+                    document.documentElement.style.setProperty('--card-width', newW + 'px');
+                    var wSlider = document.getElementById("width-slider");
+                    if (wSlider) wSlider.value = newW;
+                }
+            }, { passive: false });
+
+            // Pan with Middle Mouse
+            var isPanning = false;
+            var startPanX, startPanY, startScrollLeft, startScrollTop;
+
+            container.addEventListener("mousedown", function (e) {
+                if (e.button === 1) { // Middle button
+                    e.preventDefault();
+                    isPanning = true;
+                    startPanX = e.clientX;
+                    startPanY = e.clientY;
+                    startScrollLeft = container.scrollLeft;
+                    startScrollTop = container.scrollTop;
+                    container.style.cursor = "grabbing";
+                }
+            });
+
+            window.addEventListener("mousemove", function (e) {
+                if (!isPanning) return;
+                e.preventDefault();
+                var dx = e.clientX - startPanX;
+                var dy = e.clientY - startPanY;
+                container.scrollLeft = startScrollLeft - dx;
+                container.scrollTop = startScrollTop - dy;
+            });
+
+            window.addEventListener("mouseup", function (e) {
+                if (e.button === 1 && isPanning) {
+                    isPanning = false;
+                    container.style.cursor = "default";
+                }
+            });
         });
 
     </script>
