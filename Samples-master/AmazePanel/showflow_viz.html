@@ -1185,6 +1185,13 @@
             updateRenderSelectedButton();
         }
 
+        function clearClipSelection() {
+            selectedClips = {};
+            lastSelectedKey = null;
+            refreshSelectionStyles();
+            updateRenderSelectedButton();
+        }
+
         function updateRenderSelectedButton() {
             var btn = document.getElementById("render-selected-btn");
             if (!btn) return;
@@ -2940,6 +2947,21 @@
 
             // Mouse Navigation
             var container = document.getElementById("main-container");
+
+            if (container) {
+                container.addEventListener("dblclick", function (e) {
+                    if (e.target.closest(".clip-card") ||
+                        e.target.closest(".timeline-clip") ||
+                        e.target.closest(".insert-row-btn") ||
+                        e.target.closest(".marker-pin") ||
+                        e.target.closest(".marker-label")) {
+                        return;
+                    }
+                    if (selectedClips && Object.keys(selectedClips).length > 0) {
+                        clearClipSelection();
+                    }
+                });
+            }
 
             // Zoom with Wheel
             container.addEventListener("wheel", function (e) {
