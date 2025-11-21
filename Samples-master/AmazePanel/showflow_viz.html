@@ -14,6 +14,7 @@
             --grid-gap: 5px;
             --timeline-scale: 1;
             --track-height: 50px;
+            --track-label-width: 120px;
         }
 
         body {
@@ -130,7 +131,7 @@
             border-bottom: 2px solid #444;
             height: 40px;
             display: flex;
-            margin-left: 120px;
+            margin-left: var(--track-label-width);
         }
 
         .ruler-marker {
@@ -174,7 +175,8 @@
         }
 
         .track-label {
-            width: 120px;
+            width: var(--track-label-width);
+            box-sizing: border-box;
             display: flex;
             align-items: center;
             justify-content: flex-end;
@@ -203,6 +205,7 @@
             height: 90%;
             background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
             border: 1px solid #5aa3ff;
+            box-sizing: border-box;
             border-radius: 3px;
             display: flex;
             align-items: center;
@@ -404,6 +407,7 @@
         .clip-card {
             background: #3a3a3a;
             border: 1px solid #555;
+            box-sizing: border-box;
             border-radius: 4px;
             width: 100%;
             height: 95%;
@@ -712,6 +716,8 @@
             var fps = data.fps || 60;
             var tracks = data.tracks || { "A": 0 };
             var sortedTracks = Object.keys(tracks).sort();
+            var labelWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--track-label-width"), 10) || 120;
+            var trackLabels = [];
 
             // Calculate total timeline duration
             var totalDuration = 0;
@@ -732,6 +738,7 @@
             var ruler = document.createElement("div");
             ruler.className = "timeline-ruler";
             ruler.style.width = timelineWidth + "px";
+            ruler.style.marginLeft = labelWidth + "px";
 
             // Add ruler markers with dynamic spacing to avoid label overlap
             var markerInterval = chooseMarkerInterval(pixelsPerFrame);
@@ -763,6 +770,8 @@
                 var trackLabel = document.createElement("div");
                 trackLabel.className = "track-label";
                 trackLabel.textContent = "Track " + trKey;
+                trackLabel.style.width = labelWidth + "px";
+                trackLabels.push(trackLabel);
                 trackRow.appendChild(trackLabel);
 
                 var trackContent = document.createElement("div");
@@ -785,6 +794,15 @@
                 trackRow.appendChild(trackContent);
                 root.appendChild(trackRow);
             });
+
+            // Re-measure actual rendered label width (includes padding/border) to align ruler exactly
+            if (trackLabels.length > 0) {
+                var measured = trackLabels[0].getBoundingClientRect().width;
+                if (measured && !isNaN(measured)) {
+                    trackLabels.forEach(function (lbl) { lbl.style.width = measured + "px"; });
+                    ruler.style.marginLeft = measured + "px";
+                }
+            }
         }
 
         function createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps, slotDuration) {
@@ -801,7 +819,8 @@
             var width = cDur * pixelsPerFrame;
 
             clip.style.left = startPos + "px";
-            clip.style.width = Math.max(width, 20) + "px";
+            // Subtract 1px so the border doesn't overflow into the next slot and cause overlap
+            clip.style.width = Math.max(width - 1, 19) + "px";
 
             // Clip content
             var content = document.createElement("div");
@@ -831,8 +850,8 @@
                 clip.appendChild(deleteBtn);
             }
 
-            // Click to edit
-            clip.onclick = function (e) {
+            // Double-click to edit
+            clip.ondblclick = function (e) {
                 if (!isEditMode) {
                     openEdit(sIdx, trKey, clipData);
                 }
@@ -952,12 +971,12 @@
                     "<div class='clip-name'>" + cName + "</div>" +
                     "<div class='clip-meta'>" + cDur + "f</div>";
 
-                card.onclick = function () {
+                card.ondblclick = function () {
                     if (!isEditMode) openEdit(sIdx, trKey, clipData);
                 };
             } else {
                 card.innerHTML = "<div class='clip-meta'>+</div>";
-                card.onclick = function () {
+                card.ondblclick = function () {
                     var newDur = slotDur || 600;
                     var newClip = { name: "NewClip", duration: newDur, in: 0, out: newDur };
                     if (!slot.clips) slot.clips = {};
