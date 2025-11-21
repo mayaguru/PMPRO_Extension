@@ -30,7 +30,7 @@
 (function () {
     var DEFAULT_FPS = 60;
     var DEFAULT_SLOT_FRAMES = 600; // 마커가 없거나 마지막 슬롯 끝을 알 수 없을 때
-    var TICKS_PER_SECOND = 254016000;
+    var TICKS_PER_SECOND = 254016000000;
 
     // ---------- utils ----------
     function log(msg) { $.writeln("[Showflow] " + msg); }
@@ -206,7 +206,7 @@
             var startF = markers[i].frame;
             var endF = (i < markers.length - 1) ? markers[i + 1].frame - 1 : Math.max(startF + DEFAULT_SLOT_FRAMES, maxEnd - 1);
             if (endF < startF) endF = startF;
-            var slot = { time: startF, duration: (endF - startF + 1), clips: {} };
+            var slot = { time: startF, name: markers[i].name, duration: (endF - startF + 1), clips: {} };
 
             for (var branch in tracksMap) {
                 if (!tracksMap.hasOwnProperty(branch)) continue;
