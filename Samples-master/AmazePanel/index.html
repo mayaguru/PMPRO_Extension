@@ -341,6 +341,45 @@
             gap: 8px;
         }
 
+        .quick-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .quick-slot {
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
+        }
+
+        .quick-run-btn {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        .quick-run-btn .quick-label {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .quick-run-btn .quick-path {
+            font-size: 11px;
+            color: var(--muted);
+            word-break: break-all;
+        }
+
+        .quick-load-btn {
+            width: 96px;
+            min-width: 96px;
+            justify-content: center;
+            text-align: center;
+            padding: 6px 10px;
+        }
+
         #tab-settings .button-pair {
             display: flex;
             gap: 8px;
@@ -526,12 +565,30 @@
                 csInterface.evalScript("$._PPP_.getActiveSequenceName()", myCallBackFunction);
             }
 
+            var QUICK_SLOT_COUNT = 6;
+            var quickScriptState = [];
+            var quickPlaceholderText = "스크립트를 설정하세요.";
+
+            function isAbsoluteScriptPath(path) {
+                if (!path) return false;
+                if (/^[a-zA-Z]:[\\/]/.test(path)) return true; // Windows drive
+                if (path.indexOf("\\\\") === 0) return true; // Windows UNC
+                return path.indexOf("/") === 0; // macOS/Unix
+            }
+
             // For functions which require interaction at the JavaScript level, we provide these JQuery-based
             // handlers, instead of directly invoking ExtendScript. This lets us pass data into the ExtendScript layer.
             function runAmazeScript(fileName) {
+                if (!fileName) {
+                    alert("실행할 스크립트가 설정되지 않았습니다.");
+                    return;
+                }
                 var csInterface = new CSInterface();
                 var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION); // returns forward slashes
-                var fullPath = extRoot + "/jsx/custom/" + fileName; // forward slashes are fine
+                var fullPath = fileName;
+                if (!isAbsoluteScriptPath(fullPath)) {
+                    fullPath = extRoot + "/jsx/custom/" + fileName; // forward slashes are fine
+                }
 
                 // Build safe evalFile call with error capture
                 var escaped = fullPath.replace(/\\/g, "\\\\").replace(/\"/g, "\\\"");
@@ -561,35 +618,78 @@
                 });
             }
 
-            $("#run_CreateDefFolders").on("click", function (e) {
-                e.preventDefault();
-                runAmazeScript("01_Create_Def_folders.jsx");
-            });
+            function refreshQuickRunUI(rawList) {
+                quickScriptState = [];
+                for (var i = 0; i < QUICK_SLOT_COUNT; i++) {
+                    var entry = rawList && rawList[i] ? rawList[i] : null;
+                    var path = entry && typeof entry.path === "string" ? entry.path : "";
+                    var label = entry && entry.label ? entry.label : "";
+                    if (!label && path) {
+                        label = baseName(path);
+                    }
+                    var defaultLabel = "Slot " + (i + 1);
+                    quickScriptState.push({
+                        path: path,
+                        label: label || defaultLabel
+                    });
+                    var runBtn = $("#quickRun" + i);
+                    var labelEl = $("#quickLabel" + i);
+                    var pathEl = $("#quickPath" + i);
+                    if (labelEl.length) {
+                        labelEl.text(path ? (label || defaultLabel) : defaultLabel);
+                    }
+                    if (pathEl.length) {
+                        pathEl.text(path ? path : quickPlaceholderText);
+                    }
+                    if (runBtn.length) {
+                        runBtn.prop("disabled", !path);
+                        runBtn.attr("title", path ? path : quickPlaceholderText);
+                    }
+                }
+            }
 
-            $("#run_SetInOutByMarkers").on("click", function (e) {
-                e.preventDefault();
-                runAmazeScript("03_Set_InOut_By_Markers.jsx");
-            });
+            function updateQuickSlotConfig(slotIndex, scriptPath) {
+                if (slotIndex < 0 || slotIndex >= QUICK_SLOT_COUNT) return;
+                var current = loadFlowConfig() || {};
+                if (!Array.isArray(current.quickScripts)) {
+                    current.quickScripts = [];
+                }
+                current.quickScripts[slotIndex] = scriptPath ? {
+                    path: scriptPath,
+                    label: baseName(scriptPath)
+                } : null;
+                saveFlowConfig(current);
+            }
 
-            $("#run_CalMarkDuration").on("click", function (e) {
-                e.preventDefault();
-                runAmazeScript("04_Cal_Mark_Duration.jsx");
-            });
+            function pickQuickScript(slotIndex) {
+                var dlg = window.cep.fs.showOpenDialog(false, false, "Select JSX script", "", ["jsx"]);
+                if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+                    updateQuickSlotConfig(slotIndex, dlg.data[0]);
+                }
+            }
 
-            $("#run_BuildTestScene").on("click", function (e) {
-                e.preventDefault();
-                runAmazeScript("07_BuildTestScene.jsx");
-            });
+            for (var qs = 0; qs < QUICK_SLOT_COUNT; qs++) {
+                (function (slotIndex) {
+                    $("#quickRun" + slotIndex).on("click", function (e) {
+                        e.preventDefault();
+                        var selected = quickScriptState[slotIndex];
+                        if (!selected || !selected.path) {
+                            alert("이 슬롯에는 스크립트가 없습니다.");
+                            return;
+                        }
+                        runAmazeScript(selected.path);
+                    });
 
-            $("#run_BuildFromMedia").on("click", function (e) {
-                e.preventDefault();
-                runAmazeScript("08_BuildFromMediaAndUpdateShowflow.jsx");
-            });
-
-            $("#run_UpdateShowflowTemp").on("click", function (e) {
-                e.preventDefault();
-                runAmazeScript("09_UpdateShowflow_temp.jsx");
-            });
+                    $("#quickLoad" + slotIndex).on("click", function (e) {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            updateQuickSlotConfig(slotIndex, "");
+                            return;
+                        }
+                        pickQuickScript(slotIndex);
+                    });
+                })(qs);
+            }
 
             $("#run_RenderSelected").on("click", function (e) {
                 e.preventDefault();
@@ -922,7 +1022,7 @@
 
             function loadFlowConfig() {
                 var path = configPath();
-                var parsed = { flowPath: "", renderPreset: "", renderOutput: "" };
+                var parsed = { flowPath: "", renderPreset: "", renderOutput: "", quickScripts: [] };
                 var res = window.cep.fs.readFile(path);
                 if (res.err === 0 && res.data) {
                     try {
@@ -937,6 +1037,7 @@
                 updateBackupMeta(parsed.flowPath || "");
                 currentFlowName = baseName(parsed.flowPath || "") || "";
                 window.refreshFlowMatchState();
+                refreshQuickRunUI(parsed.quickScripts || []);
                 return parsed;
             }
 
@@ -1120,14 +1221,55 @@
                         </div>
                         <button class="pill-btn primary" id="openViz">Showflow 보기</button>
                     </div>
-                    <div class="button-grid">
-                        <button class="controlBg textStyle" id="run_CreateDefFolders">Create default folders</button>
-                        <button class="controlBg textStyle" id="run_SetInOutByMarkers">Set In/Out by markers</button>
-                        <button class="controlBg textStyle" id="run_CalMarkDuration">Calc marker duration</button>
-                        <button class="controlBg textStyle" id="run_BuildTestScene">Build test scene</button>
-                        <button class="controlBg textStyle" id="run_BuildFromMedia">Build from media & update
-                            showflow</button>
-                        <button class="controlBg textStyle" id="run_UpdateShowflowTemp">Update showflow (temp)</button>
+                    <div class="quick-grid">
+                        <div class="quick-slot">
+                            <button class="controlBg textStyle quick-run-btn" id="quickRun0" data-slot="0">
+                                <span class="quick-label" id="quickLabel0">Slot 1</span>
+                                <span class="quick-path" id="quickPath0">스크립트를 설정하세요.</span>
+                            </button>
+                            <button class="pill-btn quick-load-btn" id="quickLoad0" data-slot="0"
+                                title="불러오기 (Shift+클릭: 비우기)">불러오기</button>
+                        </div>
+                        <div class="quick-slot">
+                            <button class="controlBg textStyle quick-run-btn" id="quickRun1" data-slot="1">
+                                <span class="quick-label" id="quickLabel1">Slot 2</span>
+                                <span class="quick-path" id="quickPath1">스크립트를 설정하세요.</span>
+                            </button>
+                            <button class="pill-btn quick-load-btn" id="quickLoad1" data-slot="1"
+                                title="불러오기 (Shift+클릭: 비우기)">불러오기</button>
+                        </div>
+                        <div class="quick-slot">
+                            <button class="controlBg textStyle quick-run-btn" id="quickRun2" data-slot="2">
+                                <span class="quick-label" id="quickLabel2">Slot 3</span>
+                                <span class="quick-path" id="quickPath2">스크립트를 설정하세요.</span>
+                            </button>
+                            <button class="pill-btn quick-load-btn" id="quickLoad2" data-slot="2"
+                                title="불러오기 (Shift+클릭: 비우기)">불러오기</button>
+                        </div>
+                        <div class="quick-slot">
+                            <button class="controlBg textStyle quick-run-btn" id="quickRun3" data-slot="3">
+                                <span class="quick-label" id="quickLabel3">Slot 4</span>
+                                <span class="quick-path" id="quickPath3">스크립트를 설정하세요.</span>
+                            </button>
+                            <button class="pill-btn quick-load-btn" id="quickLoad3" data-slot="3"
+                                title="불러오기 (Shift+클릭: 비우기)">불러오기</button>
+                        </div>
+                        <div class="quick-slot">
+                            <button class="controlBg textStyle quick-run-btn" id="quickRun4" data-slot="4">
+                                <span class="quick-label" id="quickLabel4">Slot 5</span>
+                                <span class="quick-path" id="quickPath4">스크립트를 설정하세요.</span>
+                            </button>
+                            <button class="pill-btn quick-load-btn" id="quickLoad4" data-slot="4"
+                                title="불러오기 (Shift+클릭: 비우기)">불러오기</button>
+                        </div>
+                        <div class="quick-slot">
+                            <button class="controlBg textStyle quick-run-btn" id="quickRun5" data-slot="5">
+                                <span class="quick-label" id="quickLabel5">Slot 6</span>
+                                <span class="quick-path" id="quickPath5">스크립트를 설정하세요.</span>
+                            </button>
+                            <button class="pill-btn quick-load-btn" id="quickLoad5" data-slot="5"
+                                title="불러오기 (Shift+클릭: 비우기)">불러오기</button>
+                        </div>
                     </div>
                 </div>
 

@@ -21,14 +21,14 @@
       "name": "TXTBClip100BranchA"
     },
     {
-      "time": 115,
+      "time": 575,
       "clips": {
         "A": "TXTBClip120"
       },
       "name": "TXTBClip120"
     },
     {
-      "time": 1116,
+      "time": 990,
       "clips": {
         "A": "TXTBClip130branch2A",
         "B": "TXTBClip130branch2B",
@@ -39,7 +39,7 @@
       "name": "TXTBClip130branch2A"
     },
     {
-      "time": 1264,
+      "time": 1180,
       "clips": {
         "A": "TXTBClip140"
       },
