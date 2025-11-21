@@ -23,6 +23,7 @@
     <script src="./lib/CSInterface.js"></script>
     <script src="./lib/jquery-1.9.1.js"></script>
     <script src="./lib/Vulcan.js"></script>
+    <script src="./js/server_manager.js"></script>
     <link id="ppstyle" href="css/style.css" rel="stylesheet" type="text/css">
     <style>
         :root {
@@ -1597,15 +1598,12 @@
 
             $("#btn-start-server").on("click", function (e) {
                 e.preventDefault();
-                var csInterface = new CSInterface();
-                var osInfo = csInterface.getOSInformation();
-                if (!osInfo || osInfo.indexOf("Windows") === -1) {
-                    alert("Starting the Python server is only supported on Windows.");
-                    return;
-                }
-                var extPath = csInterface.getSystemPath(SystemPath.EXTENSION);
-                var scriptPath = extPath.replace(/\//g, "\\\\") + "\\\\python_server\\\\start_server.bat";
-                window.cep.process.createProcess("cmd.exe", "/c", "start", "\"\"", "\"" + scriptPath + "\"");
+                ServerManager.startServer();
+            });
+
+            $("#btn-open-server-folder").on("click", function (e) {
+                e.preventDefault();
+                ServerManager.openServerFolder();
             });
 
             // init flow display
@@ -1800,163 +1798,164 @@
             </div>
         </div>
 
-                <div class="tab-panel" id="tab-settings">
-                    <div class="panel-grid">
-                        <div class="panel-card">
-                            <h2>Flow file</h2>
-                            <div class="path-row">
-                                <span class="path-chip" id="flowPath">[not set]</span>
-                            </div>
-                            <div class="button-grid">
-                                <div class="button-pair">
-                                    <button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
-                                    <button class="controlBg textStyle" id="clearFlow">Clear</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="panel-card">
-                            <h2>Render</h2>
-                            <div class="path-row">
-                                <span class="path-chip">Preset: <span id="renderPresetPath">[not set]</span></span>
-                            </div>
-                            <div class="button-grid">
-                                <div class="button-pair">
-                                    <button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
-                                    <button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
-                                </div>
-                            </div>
-                            <div class="path-row">
-                                <span class="path-chip">Output: <span id="renderOutputPath">[not set]</span></span>
-                            </div>
-                            <div class="button-grid">
-                                <div class="button-pair">
-                                    <button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
-                                </div>
-                            </div>
+        <div class="tab-panel" id="tab-settings">
+            <div class="panel-grid">
+                <div class="panel-card">
+                    <h2>Flow file</h2>
+                    <div class="path-row">
+                        <span class="path-chip" id="flowPath">[not set]</span>
+                    </div>
+                    <div class="button-grid">
+                        <div class="button-pair">
+                            <button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
+                            <button class="controlBg textStyle" id="clearFlow">Clear</button>
                         </div>
                     </div>
-                    <div id="dragthing" draggable="true" ondragstart="dragHandler(event)" class="ghost-drag">Drag and drop
-                        import</div>
                 </div>
 
-                <div class="tab-panel" id="tab-vr">
-                    <div class="panel-card">
-                        <div class="card-head">
-                            <div>
-                                <h2>VR Streamer</h2>
-                                <p class="muted" id="vrStatusText">Waiting for server...</p>
-                            </div>
-                            <div class="status-refresh">
-                                <span class="vr-status-pill offline" id="vrStatusChip">
-                                    <span class="status-dot mismatch"></span>
-                                    <span id="vrStatusLabel">Offline</span>
-                                </span>
-                                <button class="pill-btn" id="btn-vr-refresh-preview">Reload Preview</button>
-                                <button class="pill-btn" id="btn-vr-check">Check Server</button>
-                            </div>
+                <div class="panel-card">
+                    <h2>Render</h2>
+                    <div class="path-row">
+                        <span class="path-chip">Preset: <span id="renderPresetPath">[not set]</span></span>
+                    </div>
+                    <div class="button-grid">
+                        <div class="button-pair">
+                            <button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
+                            <button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
                         </div>
-
-                        <div class="vr-preview-grid">
-                            <div class="vr-preview-panel">
-                                <div class="card-head" style="margin-bottom: 0;">
-                                    <div>
-                                        <h3>Panel Preview</h3>
-                                        <p class="muted">MJPEG feed (Program Monitor crop)</p>
-                                    </div>
-                                </div>
-                                <div class="vr-preview-display">
-                                    <img id="vrPreviewImage" alt="VR preview stream">
-                                    <div class="vr-preview-overlay" id="vrPreviewOverlay">Waiting for server...</div>
-                                </div>
-                            </div>
-                            <div class="vr-preview-panel">
-                                <div class="card-head" style="margin-bottom: 0;">
-                                    <div>
-                                        <h3>Headset Client</h3>
-                                        <p class="muted">A-Frame WebXR page</p>
-                                    </div>
-                                </div>
-                                <div class="vr-preview-display">
-                                    <iframe id="vrFrame" title="VR client"></iframe>
-                                    <div class="vr-preview-overlay" id="vrFrameOverlay">Server URL not set</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="panel-grid">
-                            <div class="panel-card" style="background: #252525;">
-                                <h3>Server Control</h3>
-                                <div class="vr-config-grid">
-                                    <label>Server URL
-                                        <input type="text" id="vrServerUrl" placeholder="http://localhost:5000">
-                                    </label>
-                                    <label>Mode
-                                        <select id="vrMode">
-                                            <option value="region">Region (crop)</option>
-                                            <option value="monitor">Full monitor</option>
-                                        </select>
-                                    </label>
-                                    <label>FPS
-                                        <input type="number" id="vrFps" min="1" max="60">
-                                    </label>
-                                    <label>Quality
-                                        <input type="number" id="vrQuality" min="10" max="95">
-                                    </label>
-                                </div>
-                                <div class="vr-button-row">
-                                    <button class="queue-btn" id="btn-start-server">Start Server (uv)</button>
-                                    <button class="queue-btn alt" id="btn-open-browser">Open in Browser</button>
-                                    <button class="pill-btn" id="btn-vr-save-host">Save Settings</button>
-                                </div>
-                                <div class="vr-meta">
-                                    <span>Launch script: <code>python_server/start_server.bat</code></span>
-                                    <span>Local IP: <code id="vrLocalIp">-</code></span>
-                                </div>
-                            </div>
-
-                            <div class="panel-card" style="background: #252525;">
-                                <h3>Capture Region (relative to monitor origin)</h3>
-                                <div class="vr-config-grid">
-                                    <label>Monitor
-                                        <select id="vrMonitorIndex"></select>
-                                    </label>
-                                    <label>Top (px)
-                                        <input type="number" id="vrTop" min="0">
-                                    </label>
-                                    <label>Left (px)
-                                        <input type="number" id="vrLeft" min="0">
-                                    </label>
-                                    <label>Width (px)
-                                        <input type="number" id="vrWidth" min="1">
-                                    </label>
-                                    <label>Height (px)
-                                        <input type="number" id="vrHeight" min="1">
-                                    </label>
-                                </div>
-                                <div class="vr-button-row">
-                                    <button class="pill-btn" id="btn-vr-seq-dims">Use Sequence Size</button>
-                                    <button class="queue-btn" id="btn-vr-apply">Send Settings to Server</button>
-                                </div>
-                                <p class="muted" id="vrConfigStatus">Adjust offsets so the crop matches the Program
-                                    Monitor window.</p>
-                            </div>
-
-                            <div class="panel-card" style="background: #252525;">
-                                <h3>Steps</h3>
-                                <ol style="font-size: 12px; color: #ccc; padding-left: 20px; line-height: 1.6;">
-                                    <li>Ensure <code>uv</code> is installed and click <strong>Start Server</strong>.
-                                    </li>
-                                    <li>Wait for the status above to turn green, then fine-tune the capture region.</li>
-                                    <li>Put on your headset and open the browser.</li>
-                                    <li>Visit <code id="local-ip-display">http://&lt;YOUR_PC_IP&gt;:5000</code> (or the
-                                        server URL you set).</li>
-                                </ol>
-                            </div>
+                    </div>
+                    <div class="path-row">
+                        <span class="path-chip">Output: <span id="renderOutputPath">[not set]</span></span>
+                    </div>
+                    <div class="button-grid">
+                        <div class="button-pair">
+                            <button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
                         </div>
                     </div>
                 </div>
             </div>
+            <div id="dragthing" draggable="true" ondragstart="dragHandler(event)" class="ghost-drag">Drag and drop
+                import</div>
+        </div>
+
+        <div class="tab-panel" id="tab-vr">
+            <div class="panel-card">
+                <div class="card-head">
+                    <div>
+                        <h2>VR Streamer</h2>
+                        <p class="muted" id="vrStatusText">Waiting for server...</p>
+                    </div>
+                    <div class="status-refresh">
+                        <span class="vr-status-pill offline" id="vrStatusChip">
+                            <span class="status-dot mismatch"></span>
+                            <span id="vrStatusLabel">Offline</span>
+                        </span>
+                        <button class="pill-btn" id="btn-vr-refresh-preview">Reload Preview</button>
+                        <button class="pill-btn" id="btn-vr-check">Check Server</button>
+                    </div>
+                </div>
+
+                <div class="vr-preview-grid">
+                    <div class="vr-preview-panel">
+                        <div class="card-head" style="margin-bottom: 0;">
+                            <div>
+                                <h3>Panel Preview</h3>
+                                <p class="muted">MJPEG feed (Program Monitor crop)</p>
+                            </div>
+                        </div>
+                        <div class="vr-preview-display">
+                            <img id="vrPreviewImage" alt="VR preview stream">
+                            <div class="vr-preview-overlay" id="vrPreviewOverlay">Waiting for server...</div>
+                        </div>
+                    </div>
+                    <div class="vr-preview-panel">
+                        <div class="card-head" style="margin-bottom: 0;">
+                            <div>
+                                <h3>Headset Client</h3>
+                                <p class="muted">A-Frame WebXR page</p>
+                            </div>
+                        </div>
+                        <div class="vr-preview-display">
+                            <iframe id="vrFrame" title="VR client"></iframe>
+                            <div class="vr-preview-overlay" id="vrFrameOverlay">Server URL not set</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-grid">
+                    <div class="panel-card" style="background: #252525;">
+                        <h3>Server Control</h3>
+                        <div class="vr-config-grid">
+                            <label>Server URL
+                                <input type="text" id="vrServerUrl" placeholder="http://localhost:5000">
+                            </label>
+                            <label>Mode
+                                <select id="vrMode">
+                                    <option value="region">Region (crop)</option>
+                                    <option value="monitor">Full monitor</option>
+                                </select>
+                            </label>
+                            <label>FPS
+                                <input type="number" id="vrFps" min="1" max="60">
+                            </label>
+                            <label>Quality
+                                <input type="number" id="vrQuality" min="10" max="95">
+                            </label>
+                        </div>
+                        <div class="vr-button-row">
+                            <button class="queue-btn" id="btn-start-server">Start Server (uv)</button>
+                            <button class="queue-btn ghost" id="btn-open-server-folder">Open Server Folder</button>
+                            <button class="queue-btn alt" id="btn-open-browser">Open in Browser</button>
+                            <button class="pill-btn" id="btn-vr-save-host">Save Settings</button>
+                        </div>
+                        <div class="vr-meta">
+                            <span>Launch script: <code>python_server/start_server.bat</code></span>
+                            <span>Local IP: <code id="vrLocalIp">-</code></span>
+                        </div>
+                    </div>
+
+                    <div class="panel-card" style="background: #252525;">
+                        <h3>Capture Region (relative to monitor origin)</h3>
+                        <div class="vr-config-grid">
+                            <label>Monitor
+                                <select id="vrMonitorIndex"></select>
+                            </label>
+                            <label>Top (px)
+                                <input type="number" id="vrTop" min="0">
+                            </label>
+                            <label>Left (px)
+                                <input type="number" id="vrLeft" min="0">
+                            </label>
+                            <label>Width (px)
+                                <input type="number" id="vrWidth" min="1">
+                            </label>
+                            <label>Height (px)
+                                <input type="number" id="vrHeight" min="1">
+                            </label>
+                        </div>
+                        <div class="vr-button-row">
+                            <button class="pill-btn" id="btn-vr-seq-dims">Use Sequence Size</button>
+                            <button class="queue-btn" id="btn-vr-apply">Send Settings to Server</button>
+                        </div>
+                        <p class="muted" id="vrConfigStatus">Adjust offsets so the crop matches the Program
+                            Monitor window.</p>
+                    </div>
+
+                    <div class="panel-card" style="background: #252525;">
+                        <h3>Steps</h3>
+                        <ol style="font-size: 12px; color: #ccc; padding-left: 20px; line-height: 1.6;">
+                            <li>Ensure <code>uv</code> is installed and click <strong>Start Server</strong>.
+                            </li>
+                            <li>Wait for the status above to turn green, then fine-tune the capture region.</li>
+                            <li>Put on your headset and open the browser.</li>
+                            <li>Visit <code id="local-ip-display">http://&lt;YOUR_PC_IP&gt;:5000</code> (or the
+                                server URL you set).</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 </body>
 
