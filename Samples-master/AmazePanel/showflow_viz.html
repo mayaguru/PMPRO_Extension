@@ -89,15 +89,21 @@
         .save-button {
             display: inline-flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            min-width: 170px;
+            justify-content: flex-start;
+            gap: 12px;
+            min-width: 0;
+            padding: 10px 18px;
         }
 
         .save-button .save-status {
             display: inline-flex;
             align-items: center;
             gap: 6px;
+            white-space: nowrap;
+        }
+
+        .save-button-label {
+            white-space: nowrap;
         }
 
         #save-indicator {
@@ -950,7 +956,7 @@
                     <button onclick="openMarkerList()">Edit Markers</button>
                     <button onclick="loadData()">Reload</button>
                     <button class="primary save-button" onclick="saveData()" id="save-button">
-                        <span class="save-button-label">Save Changes</span>
+                        <span class="save-button-label">Save</span>
                         <span class="save-status">
                             <span id="save-indicator"></span>
                             <span id="save-text">Saved</span>
