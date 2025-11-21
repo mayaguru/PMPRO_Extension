@@ -15,886 +15,636 @@
 **************************************************************************/
 -->
 <html>
-<title>AmazePanel</title>
 
 <head>
-	<meta charset="utf-8">
-	<script src="./ext.js"></script>
-	<script src="./lib/CSInterface.js"></script>
-	<script src="./lib/jquery-1.9.1.js"></script>
-	<script src="./lib/Vulcan.js"></script>
-	<link id="ppstyle" href="css/style.css" rel="stylesheet" type="text/css">
-	<style>
-		/* Emphasize render queue buttons */
-		.render-queue {
-			margin-top: 12px;
-			border: 1px solid #3c3c3c;
-			border-radius: 6px;
-			padding: 12px 14px 16px;
-			background: #181818;
-			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-		}
-
-		.render-queue h2 {
-			margin-top: 0;
-			margin-bottom: 12px;
-		}
-
-		.queue-actions {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 10px;
-		}
-
-		.queue-btn {
-			min-width: 220px;
-			padding: 12px 16px;
-			font-weight: 700;
-			font-size: 14px;
-			background: linear-gradient(135deg, #2e8bff, #1f6ad7);
-			border: 1px solid #0f4fb2;
-			border-radius: 8px;
-			color: #fff;
-			cursor: pointer;
-			transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.1s ease;
-		}
-
-		.queue-btn.alt {
-			background: linear-gradient(135deg, #ff9b42, #ff7a18);
-			border: 1px solid #d95f00;
-		}
-
-		.queue-btn:hover {
-			transform: translateY(-1px);
-			box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
-			opacity: 0.95;
-		}
-
-		.queue-btn:active {
-			transform: translateY(0);
-			box-shadow: none;
-		}
-	</style>
-	<script type="text/javascript">
-		$(document).ready(function () {
-
-			// For functions which require interaction at the JavaScript level, we provide these JQuery-based
-			// handlers, instead of directly invoking ExtendScript .This gives the JavaScript layer a chance
-			// to pass data into the ExtendScript layer, and process the results.
-
-			function runAmazeScript(fileName) {
-				var csInterface = new CSInterface();
-				var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION); // returns forward slashes
-				var fullPath = extRoot + "/jsx/custom/" + fileName; // forward slashes are fine
-
-				// Build safe evalFile call with error capture
-				var escaped = fullPath.replace(/\\/g, "\\\\").replace(/\"/g, "\\\"");
-				var jsxCall = '(function(){ ' +
-					'try { ' +
-					'  var f = new File("' + escaped + '"); ' +
-					'  var info = "path=" + f.fsName + " exists=" + f.exists; ' +
-					'  if (!f.exists) { return "ERR: missing file -> " + info; } ' +
-					'  var res; ' +
-					'  try { res = $.evalFile(f); } catch(evalErr) { ' +
-					'    var msg1 = (evalErr && evalErr.toString) ? evalErr.toString() : evalErr; ' +
-					'    var ln1 = (evalErr && evalErr.line) ? evalErr.line : "?"; ' +
-					'    return "ERR-EVAL: " + msg1 + " line=" + ln1 + " info=" + info; ' +
-					'  } ' +
-					'  return "ok: " + info + " res=" + res; ' +
-					'} catch(e) { ' +
-					'  var msg = (e && e.toString) ? e.toString() : e; ' +
-					'  var ln = (e && e.line) ? e.line : "?"; ' +
-					'  return "ERR: " + msg + " line=" + ln + " info=' + escaped + '"; ' +
-					'}' +
-					'})()';
-
-				// Debug: show what we are launching, then run and report result
-				alert("Launching script:\n" + fileName + "\n" + fullPath);
-				csInterface.evalScript(jsxCall, function (res) {
-					if (res && res.indexOf("ERR:") === 0) {
-						alert("Script error:\n" + res);
-					}
-				});
-			}
-
-			$("#run_CreateDefFolders").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("01_Create_Def_folders.jsx");
-			});
-
-			$("#run_SetInOutByMarkers").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("03_Set_InOut_By_Markers.jsx");
-			});
-
-			$("#run_CalMarkDuration").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("04_Cal_Mark_Duration.jsx");
-			});
-
-			$("#run_BuildTestScene").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("07_BuildTestScene.jsx");
-			});
-
-			$("#run_BuildFromMedia").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("08_BuildFromMediaAndUpdateShowflow.jsx");
-			});
-
-			$("#run_UpdateShowflowTemp").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("09_UpdateShowflow_temp.jsx");
-			});
-
-			$("#run_RenderSelected").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("10_RenderSelected.jsx");
-			});
-
-			$("#run_QueueMarkersToAME").on("click", function (e) {
-				e.preventDefault();
-				runAmazeScript("11_Queue_Markers_To_AME.jsx");
-			});
-
-			// ----- Flow JSON selector (panel layer) -----
-			var CONFIG_FILE = "flow_config.json";
-			var flowPathEl = $("#flowPath");
-			var mediaPathEl = $("#mediaPath");
-			var renderPresetEl = $("#renderPresetPath");
-			var renderOutputEl = $("#renderOutputPath");
-
-			function configPath() {
-				var csInterface = new CSInterface();
-				var osVersion = csInterface.getOSInformation();
-				var isWin = osVersion && osVersion.indexOf("Windows") >= 0;
-				var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
-				if (isWin) extRoot = extRoot.replace(/\//g, "\\\\");
-				var sep = isWin ? "\\\\" : "/";
-				return extRoot + sep + CONFIG_FILE;
-			}
-
-			function loadFlowConfig() {
-				var path = configPath();
-				var parsed = { flowPath: "", mediaDir: "", renderPreset: "", renderOutput: "" };
-				var res = window.cep.fs.readFile(path);
-				if (res.err === 0 && res.data) {
-					try {
-						var raw = JSON.parse(res.data);
-						if (raw) parsed = raw;
-					} catch (e) { }
-				}
-				flowPathEl.text(parsed.flowPath || "[not set]");
-				mediaPathEl.text(parsed.mediaDir || "[not set]");
-				renderPresetEl.text(parsed.renderPreset || "[not set]");
-				renderOutputEl.text(parsed.renderOutput || "[not set]");
-				return parsed;
-			}
-
-			function saveFlowConfig(cfg) {
-				var path = configPath();
-				var payload = JSON.stringify(cfg || {}, null, 2);
-				window.cep.fs.writeFile(path, payload);
-				loadFlowConfig(); // refresh display
-			}
-
-			$("#pickFlow").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var startFolder = csInterface.getSystemPath(SystemPath.EXTENSION);
-				var dlg = window.cep.fs.showOpenDialog(false, false, "Select showflow JSON", startFolder, ["json"]);
-				if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
-					// preserve media dir if already set
-					var current = loadFlowConfig() || {};
-					current.flowPath = dlg.data[0];
-					saveFlowConfig(current);
-				}
-			});
-
-			$("#clearFlow").on("click", function (e) {
-				e.preventDefault();
-				var current = loadFlowConfig() || {};
-				current.flowPath = "";
-				saveFlowConfig(current);
-			});
-
-			$("#pickMedia").on("click", function (e) {
-				e.preventDefault();
-				var dlg = window.cep.fs.showOpenDialog(false, true, "Select media folder", "", []);
-				if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
-					var current = loadFlowConfig() || {};
-					current.mediaDir = dlg.data[0];
-					saveFlowConfig(current);
-				}
-			});
-
-			$("#clearMedia").on("click", function (e) {
-				e.preventDefault();
-				var current = loadFlowConfig() || {};
-				current.mediaDir = "";
-				saveFlowConfig(current);
-			});
-
-			$("#pickRenderPreset").on("click", function (e) {
-				e.preventDefault();
-				var dlg = window.cep.fs.showOpenDialog(false, false, "Select AME preset (.epr)", "", ["epr"]);
-				if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
-					var current = loadFlowConfig() || {};
-					current.renderPreset = dlg.data[0];
-					saveFlowConfig(current);
-				}
-			});
-
-			$("#clearRenderPreset").on("click", function (e) {
-				e.preventDefault();
-				var current = loadFlowConfig() || {};
-				current.renderPreset = "";
-				saveFlowConfig(current);
-			});
-
-			$("#pickRenderOutput").on("click", function (e) {
-				e.preventDefault();
-				var dlg = window.cep.fs.showOpenDialog(false, true, "Select render output folder", "", []);
-				if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
-					var current = loadFlowConfig() || {};
-					current.renderOutput = dlg.data[0];
-					saveFlowConfig(current);
-				}
-			});
-
-			$("#clearRenderOutput").on("click", function (e) {
-				e.preventDefault();
-				var current = loadFlowConfig() || {};
-				current.renderOutput = "";
-				saveFlowConfig(current);
-			});
-
-			// init flow display
-			loadFlowConfig();
-
-			$("#copypresets").on("click", function (e) {
-				e.preventDefault();
-
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				csInterface.evalScript('$._PPP_.getUserName()', myUserNameFunction);
-
-				if (OSVersion) {
-
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var initPath = 'C:\\Users\\' + username.innerHTML;
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var initPath = '/Users/' + username.innerHTML;
-						var sep = '/';
-					}
-
-					path = path + sep + 'payloads' + sep + 'Effect\ Presets\ and\ Custom\ Items.prfpset';
-
-					var readResult = window.cep.fs.readFile(path);
-
-					if (0 == readResult.err) {
-
-						// We build a path to the preset, based on the OS user's name.
-
-						var addOutPath = '/Documents/Adobe/Premiere\ Pro/22.0/Profile-' + username.innerHTML +
-							'/Effect\ Presets\ and\ Custom\ Items.prfpset';
-						var fullOutPath = initPath + addOutPath;
-						var writeResult = window.cep.fs.writeFile(fullOutPath, readResult.data);
-						var resultMsg = "";
-
-						if (0 == writeResult.err) {
-							resultMsg = "Successfully copied effect presets from panel to current user configuration.";
-						} else {
-							resultMsg = "Failed to copy effect presets.";
-						}
-
-						var postToEventPanel = '$._PPP_.updateEventPanel(\'';
-						postToEventPanel += resultMsg;
-						postToEventPanel += '\'';
-						postToEventPanel += ')';
-
-						csInterface.evalScript(postToEventPanel);
-					}
-				}
-			});
-
-			$("#toggleproxy").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				csInterface.evalScript('$._PPP_.toggleProxyState()', mySetProxyFunction);
-				csInterface.evalScript('$._PPP_.getProjectProxySetting()', myGetProxyFunction);
-			});
-
-			$("#checkforums").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				csInterface.openURLInDefaultBrowser("https://forums.adobe.com/community/premiere/sdk");
-			});
-
-			$("#openfolder").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\';
-						path = path.replace(/\//g, sep);
-						window.cep.process.createProcess('C:\\Windows\\explorer.exe', path);
-					} else {
-						window.cep.process.createProcess('/usr/bin/open', path);
-					}
-				}
-			});
-
-			$("#openlogfilefolder").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var userDataPath = csInterface.getSystemPath(SystemPath.USER_DATA);
-				var justTheFirstBit = userDataPath.split('A');
-				var actualDestinationPath = justTheFirstBit[0];
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						actualDestinationPath = actualDestinationPath + "AppData/Roaming/Adobe/Premiere Pro/22.0/logs";
-						var sep = '\\';
-						actualDestinationPath = actualDestinationPath.replace(/\//g, sep);
-						window.cep.process.createProcess('C:\\Windows\\explorer.exe', actualDestinationPath);
-					} else {
-						actualDestinationPath = actualDestinationPath + "Preferences/Adobe/Premiere Pro/22.0/logs";
-						window.cep.process.createProcess('/usr/bin/open', actualDestinationPath);
-					}
-				}
-			});
-
-			$("#readAPIdocs").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				csInterface.openURLInDefaultBrowser("http://ppro.aenhancers.com");
-			});
-
-			$("#newseqfrompreset").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var sep = '/';
-					}
-
-					// Build a String to pass the path to the script.
-					// (Sounds more complicated than it is.)
-
-					path = path + sep + 'payloads' + sep + 'AmazePanel.sqpreset';
-
-					var pre = '$._PPP_.createSequenceFromPreset(\'';
-					var post = '\'';
-					var postpost = ')';
-
-					var whole_megillah = pre + path + post + postpost;
-
-					csInterface.evalScript(whole_megillah);
-				}
-			});
-
-			$("#renderusingdefaultpreset").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var sep = '/';
-					}
-
-					// Build a String to pass the path to the script.
-					// (Sounds more complicated than it is.)
-
-					path = path + sep + 'payloads' + sep + 'example.epr';
-
-					var pre = '$._PPP_.render(\'';
-					var post = '\'';
-					var postpost = ')';
-
-					var whole_megillah = pre + path + post + postpost;
-
-					csInterface.evalScript(whole_megillah);
-				}
-			});
-
-			$("#stitchusingdefaultpreset").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var sep = '/';
-					}
-
-					// Build a String to pass the path to the script.
-					// (Sounds more complicated than it is.)
-
-					path = path + sep + 'payloads' + sep + 'example.epr';
-
-					var pre = '$._PPP_.stitch(\'';
-					var post = '\'';
-					var postpost = ')';
-
-					var whole_megillah = pre + path + post + postpost;
-
-					csInterface.evalScript(whole_megillah);
-				}
-			});
-
-			$("#transcodeexternal").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var sep = '/';
-					}
-
-					// Build a String to pass the path to the script.
-					// (Sounds more complicated than it is.)
-
-					path = path + sep + 'payloads' + sep + 'example.epr';
-
-					var pre = '$._PPP_.transcodeExternal(\'';
-					var post = '\'';
-					var postpost = ')';
-
-					var whole_megillah = pre + path + post + postpost;
-
-					csInterface.evalScript(whole_megillah);
-				}
-			});
-
-			$("#saveaspng").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var sep = '/';
-					}
-
-					// Build a String to pass the path to the script.
-					// (Sounds more complicated than it is.)
-
-					path = path + sep + 'payloads' + sep + 'png.epr';
-
-					var pre = '$._PPP_.exportCurrentFrameAsPNG(\'';
-					var post = '\'';
-					var postpost = ')';
-
-					var whole_megillah = pre + path + post + postpost;
-
-					csInterface.evalScript(whole_megillah);
-				}
-			});
-
-			$("#ingest").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var sep = '/';
-					}
-
-					// Build a String to pass the path to the script.
-					// (Sounds more complicated than it is.)
-
-					path = path + sep + 'payloads' + sep + 'example.epr';
-
-					var pre = '$._PPP_.ingestFiles(\'';
-					var post = '\'';
-					var postpost = ');';
-
-					var whole_megillah = pre + path + post + postpost;
-
-					csInterface.evalScript(whole_megillah);
-				}
-			});
-
-			$("#transcodeusingdefaultpreset").on("click", function (e) {
-				e.preventDefault();
-				var csInterface = new CSInterface();
-				var OSVersion = csInterface.getOSInformation();
-				var path = csInterface.getSystemPath(SystemPath.EXTENSION);
-
-				if (OSVersion) {
-					// The path always comes back with '/' path separators. Windows needs '\\'.
-					if (OSVersion.indexOf("Windows") >= 0) {
-						var sep = '\\\\';
-						path = path.replace(/\//g, sep);
-					} else {
-						var sep = '/';
-					}
-
-					// Build a String to pass the path to the script.
-					// (Sounds more complicated than it is.)
-
-					path = path + sep + 'payloads' + sep + 'example.epr';
-
-					var pre = '$._PPP_.transcode(\'';
-					var post = '\'';
-					var postpost = ')';
-
-					var whole_megillah = pre + path + post + postpost;
-
-					csInterface.evalScript(whole_megillah);
-				}
-			});
-			$("#openViz").on("click", function (e) {
-				e.preventDefault();
-				window.location.href = "showflow_viz.html";
-			});
-		});
-	</script>
+    <meta charset="utf-8">
+    <title>AmazePanel</title>
+    <script src="./ext.js"></script>
+    <script src="./lib/CSInterface.js"></script>
+    <script src="./lib/jquery-1.9.1.js"></script>
+    <script src="./lib/Vulcan.js"></script>
+    <link id="ppstyle" href="css/style.css" rel="stylesheet" type="text/css">
+    <style>
+        :root {
+            --bg: #1a1a1a;
+            --panel: #1f1f1f;
+            --panel-strong: #252525;
+            --border: #303030;
+            --muted: #8f8f8f;
+            --text: #d8d8d8;
+            --accent: #ff9b42;
+            --accent-strong: #d74e00;
+            --shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: #2a2a2a;
+            border-bottom: 1px solid #3a3a3a;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.35);
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .title-block h1 {
+            margin: 0;
+            font-size: 16px;
+            color: #eee;
+            letter-spacing: 0.4px;
+        }
+
+        .title-block small {
+            color: var(--muted);
+            display: block;
+            margin-top: 2px;
+            font-size: 11px;
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            background: #333;
+            border: 1px solid #444;
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.3px;
+            transition: all 0.12s ease;
+        }
+
+        .tab-btn:hover {
+            background: #3d3d3d;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: #111;
+            border-color: var(--accent);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 8px;
+            padding: 10px 16px 0;
+            flex-wrap: wrap;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .status-chip {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 6px 10px;
+            border-radius: 8px;
+            color: var(--text);
+        }
+
+        #content {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tab-panel {
+            display: none;
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+            padding: 16px;
+        }
+
+        .tab-panel.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 14px;
+            align-content: start;
+        }
+
+        .panel-card {
+            background: linear-gradient(145deg, var(--panel), var(--panel-strong));
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+
+        .panel-card h2 {
+            margin: 0 0 8px;
+            letter-spacing: 0.4px;
+            font-size: 14px;
+            color: #ededed;
+        }
+
+        .card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .muted {
+            color: var(--muted);
+            margin: 0;
+            font-size: 12px;
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px;
+        }
+
+        button {
+            background: #333;
+            border: 1px solid #4a4a4a;
+            color: #f2f2f2;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.12s ease;
+            text-align: left;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-start;
+            height: auto;
+            min-height: 38px;
+            line-height: 1.2;
+        }
+
+        button:hover {
+            background: #3c3c3c;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .pill-btn {
+            border-radius: 999px;
+            padding: 8px 12px;
+            background: #262626;
+            border-color: #3d3d3d;
+            color: var(--text);
+        }
+
+        .pill-btn.primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: #111;
+            border-color: var(--accent);
+        }
+
+        .path-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .path-chip {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            padding: 8px 10px;
+            border-radius: 10px;
+            color: #eaeaea;
+            min-width: 220px;
+            font-size: 12px;
+        }
+
+        .render-queue {
+            margin-top: 0;
+            border: 1px solid #3c3c3c;
+            border-radius: 12px;
+            padding: 12px 14px 16px;
+            background: #181818;
+            box-shadow: var(--shadow);
+        }
+
+        .queue-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .queue-btn {
+            min-width: 220px;
+            padding: 12px 16px;
+            font-weight: 700;
+            font-size: 14px;
+            background: linear-gradient(135deg, #2e8bff, #1f6ad7);
+            border: 1px solid #0f4fb2;
+            border-radius: 10px;
+            color: #fff;
+            cursor: pointer;
+            transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.1s ease;
+        }
+
+        .queue-btn.alt {
+            background: linear-gradient(135deg, #ff9b42, #ff7a18);
+            border: 1px solid #d95f00;
+        }
+
+        .queue-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+            opacity: 0.95;
+        }
+
+        .queue-btn:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        #tab-showflow .panel-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #showflowFrame {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+            background: #111;
+            box-shadow: var(--shadow);
+        }
+
+        .ghost-drag {
+            display: none;
+        }
+
+        a.inline-link {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        a.inline-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+    <script type="text/javascript">
+        $(document).ready(function () {
+            function activateTab(tab) {
+                $(".tab-btn").removeClass("active");
+                $(".tab-btn[data-tab='" + tab + "']").addClass("active");
+                $(".tab-panel").removeClass("active");
+                $("#tab-" + tab).addClass("active");
+            }
+
+            $(".tab-btn").on("click", function () {
+                activateTab($(this).data("tab"));
+            });
+
+            $(".tab-jump").on("click", function () {
+                activateTab($(this).data("tabTarget"));
+            });
+
+            // For functions which require interaction at the JavaScript level, we provide these JQuery-based
+            // handlers, instead of directly invoking ExtendScript. This lets us pass data into the ExtendScript layer.
+            function runAmazeScript(fileName) {
+                var csInterface = new CSInterface();
+                var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION); // returns forward slashes
+                var fullPath = extRoot + "/jsx/custom/" + fileName; // forward slashes are fine
+
+                // Build safe evalFile call with error capture
+                var escaped = fullPath.replace(/\\/g, "\\\\").replace(/\"/g, "\\\"");
+                var jsxCall = '(function(){ ' +
+                    'try { ' +
+                    '  var f = new File("' + escaped + '"); ' +
+                    '  var info = "path=" + f.fsName + " exists=" + f.exists; ' +
+                    '  if (!f.exists) { return "ERR: missing file -> " + info; } ' +
+                    '  var res; ' +
+                    '  try { res = $.evalFile(f); } catch(evalErr) { ' +
+                    '    var msg1 = (evalErr && evalErr.toString) ? evalErr.toString() : evalErr; ' +
+                    '    var ln1 = (evalErr && evalErr.line) ? evalErr.line : "?"; ' +
+                    '    return "ERR-EVAL: " + msg1 + " line=" + ln1 + " info=" + info; ' +
+                    '  } ' +
+                    '  return "ok: " + info + " res=" + res; ' +
+                    '} catch(e) { ' +
+                    '  var msg = (e && e.toString) ? e.toString() : e; ' +
+                    '  var ln = (e && e.line) ? e.line : "?"; ' +
+                    '  return "ERR: " + msg + " line=" + ln + " info=' + escaped + '"; ' +
+                    '}' +
+                    '})()';
+
+                csInterface.evalScript(jsxCall, function (res) {
+                    if (res && res.indexOf("ERR:") === 0) {
+                        alert("Script error:\n" + res);
+                    }
+                });
+            }
+
+            $("#run_CreateDefFolders").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("01_Create_Def_folders.jsx");
+            });
+
+            $("#run_SetInOutByMarkers").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("03_Set_InOut_By_Markers.jsx");
+            });
+
+            $("#run_CalMarkDuration").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("04_Cal_Mark_Duration.jsx");
+            });
+
+            $("#run_BuildTestScene").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("07_BuildTestScene.jsx");
+            });
+
+            $("#run_BuildFromMedia").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("08_BuildFromMediaAndUpdateShowflow.jsx");
+            });
+
+            $("#run_UpdateShowflowTemp").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("09_UpdateShowflow_temp.jsx");
+            });
+
+            $("#run_RenderSelected").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("10_RenderSelected.jsx");
+            });
+
+            $("#run_QueueMarkersToAME").on("click", function (e) {
+                e.preventDefault();
+                runAmazeScript("11_Queue_Markers_To_AME.jsx");
+            });
+
+            // ----- Flow JSON selector (panel layer) -----
+            var CONFIG_FILE = "flow_config.json";
+            var flowPathEl = $("#flowPath");
+            var mediaPathEl = $("#mediaPath");
+            var renderPresetEl = $("#renderPresetPath");
+            var renderOutputEl = $("#renderOutputPath");
+
+            function configPath() {
+                var csInterface = new CSInterface();
+                var osVersion = csInterface.getOSInformation();
+                var isWin = osVersion && osVersion.indexOf("Windows") >= 0;
+                var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+                if (isWin) extRoot = extRoot.replace(/\//g, "\\\\");
+                var sep = isWin ? "\\\\" : "/";
+                return extRoot + sep + CONFIG_FILE;
+            }
+
+            function loadFlowConfig() {
+                var path = configPath();
+                var parsed = { flowPath: "", mediaDir: "", renderPreset: "", renderOutput: "" };
+                var res = window.cep.fs.readFile(path);
+                if (res.err === 0 && res.data) {
+                    try {
+                        var raw = JSON.parse(res.data);
+                        if (raw) parsed = raw;
+                    } catch (e) { }
+                }
+                flowPathEl.text(parsed.flowPath || "[not set]");
+                mediaPathEl.text(parsed.mediaDir || "[not set]");
+                renderPresetEl.text(parsed.renderPreset || "[not set]");
+                renderOutputEl.text(parsed.renderOutput || "[not set]");
+                return parsed;
+            }
+
+            function saveFlowConfig(cfg) {
+                var path = configPath();
+                var payload = JSON.stringify(cfg || {}, null, 2);
+                window.cep.fs.writeFile(path, payload);
+                loadFlowConfig(); // refresh display
+            }
+
+            $("#pickFlow").on("click", function (e) {
+                e.preventDefault();
+                var csInterface = new CSInterface();
+                var startFolder = csInterface.getSystemPath(SystemPath.EXTENSION);
+                var dlg = window.cep.fs.showOpenDialog(false, false, "Select showflow JSON", startFolder, ["json"]);
+                if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+                    var current = loadFlowConfig() || {};
+                    current.flowPath = dlg.data[0];
+                    saveFlowConfig(current);
+                }
+            });
+
+            $("#clearFlow").on("click", function (e) {
+                e.preventDefault();
+                var current = loadFlowConfig() || {};
+                current.flowPath = "";
+                saveFlowConfig(current);
+            });
+
+            $("#pickMedia").on("click", function (e) {
+                e.preventDefault();
+                var dlg = window.cep.fs.showOpenDialog(false, true, "Select media folder", "", []);
+                if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+                    var current = loadFlowConfig() || {};
+                    current.mediaDir = dlg.data[0];
+                    saveFlowConfig(current);
+                }
+            });
+
+            $("#clearMedia").on("click", function (e) {
+                e.preventDefault();
+                var current = loadFlowConfig() || {};
+                current.mediaDir = "";
+                saveFlowConfig(current);
+            });
+
+            $("#pickRenderPreset").on("click", function (e) {
+                e.preventDefault();
+                var dlg = window.cep.fs.showOpenDialog(false, false, "Select AME preset (.epr)", "", ["epr"]);
+                if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+                    var current = loadFlowConfig() || {};
+                    current.renderPreset = dlg.data[0];
+                    saveFlowConfig(current);
+                }
+            });
+
+            $("#clearRenderPreset").on("click", function (e) {
+                e.preventDefault();
+                var current = loadFlowConfig() || {};
+                current.renderPreset = "";
+                saveFlowConfig(current);
+            });
+
+            $("#pickRenderOutput").on("click", function (e) {
+                e.preventDefault();
+                var dlg = window.cep.fs.showOpenDialog(false, true, "Select render output folder", "", []);
+                if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
+                    var current = loadFlowConfig() || {};
+                    current.renderOutput = dlg.data[0];
+                    saveFlowConfig(current);
+                }
+            });
+
+            $("#clearRenderOutput").on("click", function (e) {
+                e.preventDefault();
+                var current = loadFlowConfig() || {};
+                current.renderOutput = "";
+                saveFlowConfig(current);
+            });
+
+            // init flow display
+            loadFlowConfig();
+
+            $("#openViz").on("click", function (e) {
+                e.preventDefault();
+                activateTab("showflow");
+            });
+
+            $("#refreshShowflow").on("click", function (e) {
+                e.preventDefault();
+                var bust = Date.now();
+                window.location.href = "refresh.html?ts=" + bust;
+            });
+
+            // Start on Showflow tab by default
+            activateTab("showflow");
+        });
+    </script>
 </head>
 
-<body onLoad="onLoaded()">
-	<a href="javascript:history.go(0)">Refresh panel</a>
-	<p id="username">[uninitialized]</p>
-	<p id="version_string">[uninitialized]</p>
-	<p id="active_seq">[uninitialized]</p>
-	<p id="proxies_on">Proxies enabled for sequence: </p>
+<body onLoad="onLoaded()" class="theme-showflow">
+    <div id="header">
+        <div class="title-block">
+            <h1>Amaze Panel</h1>
+            <small>시각 편집 + 스크립트 + 폴더 설정</small>
+        </div>
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="showflow">Showflow Editor</button>
+            <button class="tab-btn" data-tab="scripts">Scripts</button>
+            <button class="tab-btn" data-tab="settings">Settings / Folders</button>
+            <button class="pill-btn" id="refreshShowflow">Refresh Panel</button>
+        </div>
+    </div>
 
-	<div class="group">
-		<h2>Amaze scripts</h2>
-		<button class="controlBg textStyle" id="run_CreateDefFolders">Create default folders</button>
-		<button class="controlBg textStyle" id="run_SetInOutByMarkers">Set In/Out by markers</button>
-		<button class="controlBg textStyle" id="run_CalMarkDuration">Calc marker duration</button>
-		<button class="controlBg textStyle" id="run_BuildTestScene">Build test scene</button>
-		<button class="controlBg textStyle" id="run_BuildFromMedia">Build from media & update showflow</button>
-		<button class="controlBg textStyle" id="run_UpdateShowflowTemp">Update showflow (temp)</button>
-	</div>
+    <div class="status-bar">
+        <span class="status-chip">User: <span id="username">[uninitialized]</span></span>
+        <span class="status-chip">Version: <span id="version_string">[uninitialized]</span></span>
+        <span class="status-chip">Sequence: <span id="active_seq">[uninitialized]</span></span>
+        <span class="status-chip">Proxies: <span id="proxies_on">[uninitialized]</span></span>
+    </div>
 
-	<div class="group">
-		<h2>Flow file</h2>
-		<p id="flowPath">[not set]</p>
-		<button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
-		<button class="controlBg textStyle" id="openViz">Visual Editor</button>
-		<button class="controlBg textStyle" id="clearFlow">Clear</button>
-	</div>
+    <div id="content">
+        <div class="tab-panel active" id="tab-showflow">
+            <div class="panel-card">
+                <iframe id="showflowFrame" src="showflow_viz.html" title="Showflow Visual Editor"></iframe>
+            </div>
+        </div>
 
-	<div class="group">
-		<h2>Media folder</h2>
-		<p id="mediaPath">[not set]</p>
-		<button class="controlBg textStyle" id="pickMedia">Pick media folder</button>
-		<button class="controlBg textStyle" id="clearMedia">Clear</button>
-	</div>
+        <div class="tab-panel" id="tab-scripts">
+            <div class="panel-grid">
+                <div class="panel-card">
+                    <div class="card-head">
+                        <div>
+                            <h2>스크립트 퀵 런</h2>
+                            <p class="muted">자주 쓰는 프리미어 작업을 한 번에 실행합니다.</p>
+                        </div>
+                        <button class="pill-btn primary" id="openViz">Showflow 보기</button>
+                    </div>
+                    <div class="button-grid">
+                        <button class="controlBg textStyle" id="run_CreateDefFolders">Create default folders</button>
+                        <button class="controlBg textStyle" id="run_SetInOutByMarkers">Set In/Out by markers</button>
+                        <button class="controlBg textStyle" id="run_CalMarkDuration">Calc marker duration</button>
+                        <button class="controlBg textStyle" id="run_BuildTestScene">Build test scene</button>
+                        <button class="controlBg textStyle" id="run_BuildFromMedia">Build from media & update showflow</button>
+                        <button class="controlBg textStyle" id="run_UpdateShowflowTemp">Update showflow (temp)</button>
+                    </div>
+                </div>
 
-	<div class="group">
-		<h2>Render</h2>
-		<p>Preset: <span id="renderPresetPath">[not set]</span></p>
-		<button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
-		<button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
-		<p>Output folder: <span id="renderOutputPath">[not set]</span></p>
-		<button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
-		<button class="controlBg textStyle" id="clearRenderOutput">Clear output</button>
-	</div>
+                <div class="panel-card render-queue">
+                    <h2>Render queue</h2>
+                    <div class="queue-actions">
+                        <button class="queue-btn" id="run_RenderSelected">Render active sequence</button>
+                        <button class="queue-btn alt" id="run_QueueMarkersToAME">Queue Markers to AME</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-	<div class="group render-queue">
-		<h2>Render queue</h2>
-		<div class="queue-actions">
-			<button class="queue-btn" id="run_RenderSelected">Render active sequence</button>
-			<button class="queue-btn alt" id="run_QueueMarkersToAME">Queue Markers to AME</button>
-		</div>
-	</div>
+        <div class="tab-panel" id="tab-settings">
+            <div class="panel-grid">
+                <div class="panel-card">
+                    <h2>Flow file</h2>
+                    <div class="path-row">
+                        <span class="path-chip" id="flowPath">[not set]</span>
+                    </div>
+                    <div class="button-grid">
+                        <button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
+                        <button class="controlBg textStyle" id="clearFlow">Clear</button>
+                    </div>
+                </div>
 
-	<div>
-		<h2>New in 23.0!</h2>
-		<button class="controlBg textStyle" id="btn_PPRO87"
-			onClick="evalScript('$._PPP_.importSrtAddToCaptionTrack()')">Import .srt file & add to new caption
-			track</button>
-	</div>
+                <div class="panel-card">
+                    <h2>Media folder</h2>
+                    <div class="path-row">
+                        <span class="path-chip" id="mediaPath">[not set]</span>
+                    </div>
+                    <div class="button-grid">
+                        <button class="controlBg textStyle" id="pickMedia">Pick media folder</button>
+                        <button class="controlBg textStyle" id="clearMedia">Clear</button>
+                    </div>
+                </div>
 
-	<div>
-		<h2>New in 22.0.0!</h2>
-	</div>
-
-	<button class="controlBg textStyle" id="btn_PPRO84" onClick="evalScript('$._PPP_.enableAllDisabledClips()')">Enable
-		all disabled clips in sequence</button>
-	<button class="controlBg textStyle" id="btn_PPRO85" onClick="evalScript('$._PPP_.showColorspaceInEvents()')">Show
-		Clip Colorspace in Events</button>
-	<button class="controlBg textStyle" id="btn_PPRO86" onClick="evalScript('$._PPP_.moveTrackItemOnTimeline()')">Move
-		Clip 13 Seconds on Timeline</button>
-
-	<div>
-		<h2>New in 14.3.1!</h2>
-	</div>
-
-	<button class="controlBg textStyle" id="btn_PPRO81"
-		onClick="evalScript('$._PPP_.performSceneEditDetectionOnSelection()')">Detect cuts in active sequence</button>
-
-	<div>
-		<h2>New in 14.1!</h2>
-	</div>
-
-	<button class="controlBg textStyle" id="btn_PPRO77" onClick="evalScript('$._PPP_.openProduction()')">Open a
-		production</button>
-	<button class="controlBg textStyle" id="btn_PPRO78"
-		onClick="evalScript('$._PPP_.toggleProductionLockState()')">Toggle Production lock</button>
-	<button class="controlBg textStyle" id="btn_PPRO79"
-		onClick="evalScript('$._PPP_.closeAllOpenProductionProjects()')">Close all Production projects</button>
-	<button class="controlBg textStyle" id="btn_PPRO80"
-		onClick="evalScript('$._PPP_.moveProductionProjectsToTrash()')">Trash all open Production projects</button>
-	<button class="controlBg textStyle" id="btn_PPRO82"
-		onClick="evalScript('$._PPP_.newSequenceFromProjectSelection()')">Create new sequence from selection</button>
-	<button class="controlBg textStyle" id="btn_PPRO83"
-		onClick="evalScript('$._PPP_.adjustGraphicsWhiteLuminance()')">Adjust Graphics White Luminance</button>
-
-	<div>
-		<h2>New in 14.0!</h2>
-	</div>
-	<p> </p>
-	<button class="controlBg textStyle" id="btn_PPRO76" onClick="evalScript('$._PPP_.createNewProject()')">Create new
-		project</button>
-	<button class="controlBg textStyle" id="btn_PPRO72"
-		onClick="evalScript('$._PPP_.generateSystemCompatibilityReport()')">Generate system compatibility
-		report</button>
-	<button class="controlBg textStyle" id="btn_PPRO75"
-		onClick="evalScript('$._PPP_.changeSequenceColorSpace()')">Change colorspace of active sequence</button>
-	<p> </p>
-	<div>
-		<h2>New in 13.1!</h2>
-	</div>
-	<div id="section4" class="sectionID" <p>
-		</p>
-		<p> </p>
-		<p> </p>
-		<p> </p>
-		<button class="controlBg textStyle" id="btn_PPRO57"
-			onClick="evalScript('$._PPP_.closeAllProjectsOtherThanActiveProject()')">Close all but active
-			project</button>
-		<button class="controlBg textStyle" id="btn_PPRO58"
-			onClick="evalScript('$._PPP_.findAllAdjustmentLayersInProject()')">Find all adjustment layers</button>
-		<button class="controlBg textStyle" id="btn_PPRO59"
-			onClick="evalScript('$._PPP_.consolidateDuplicates()')">Consolidate duplicate footage</button>
-		<button class="controlBg textStyle" id="btn_PPRO60" onClick="evalScript('$._PPP_.closeAllSequences()')">Close
-			all sequences (in active project)</button>
-		<button class="controlBg textStyle" id="btn_PPRO62"
-			onClick="evalScript('$._PPP_.reportSequenceVRSettings()')">Report sequence VR settings</button>
-		<button class="controlBg textStyle" id="btn_PPRO63"
-			onClick="evalScript('$._PPP_.openProjectItemInSource()')">Open selected project items in Source
-			monitor</button>
-		<button class="controlBg textStyle" id="btn_PPRO64"
-			onClick="evalScript('$._PPP_.reinterpretFootage()')">Re-interpret selected project items</button>
-		<button class="controlBg textStyle" id="btn_PPRO66" onClick="evalScript('$._PPP_.createSubSequence()')">Create
-			sub-sequence</button>
-		<button class="controlBg textStyle" id="btn_PPRO67"
-			onClick="evalScript('$._PPP_.selectAllRetimedClips()')">Select all re-timed clips</button>
-		<button class="controlBg textStyle" id="btn_PPRO68" onClick="evalScript('$._PPP_.selectReversedClips()')">Select
-			all reversed clips</button>
-		<button class="controlBg textStyle" id="btn_PPRO69" onClick="evalScript('$._PPP_.logConsoleOutput()')">Write log
-			file of console output</button>
-		<button class="controlBg textStyle" id="btn_PPRO70" onClick="evalScript('$._PPP_.setWorkspace()')">Set the
-			current Workspace</button>
-		<button id="stitchusingdefaultpreset">Stitch selected files in AME</button>
-	</div>
-	<div>
-
-
-		<div>
-			<h2>System</h2>
-		</div>
-		<div id="section1" class="sectionID">
-			<button class="controlBg textStyle" id="btn_PPRO33"
-				onClick="evalScript('$._PPP_.closeFrontSourceClip()')">Close front-most Source monitor clip</button>
-			<button class="controlBg textStyle" id="btn_PPRO35"
-				onClick="evalScript('$._PPP_.closeAllClipsInSourceMonitor()')">Close all clips in Source
-				monitor</button>
-			<button id="openfolder">Open AmazePanel folder</button>
-			<button id="openlogfilefolder">Open Premiere Pro's Log Files folder</button>
-			<button class="controlBg textStyle" id="btn_PPRO7" onClick="evalScript('$._PPP_.pokeAnywhere()')">Detect
-				Anywhere Server</button>
-			<button class="controlBg textStyle" id="btn_PPRO71"
-				onClick="evalScript('$._PPP_.enumerateTeamProjects()')">Identify open Team Projects</button>
-			<button id="checkforums">Check SDK Forums</button>
-			<button id="readAPIdocs">Read API documentation</button>
-			<button id="copypresets">Copy Presets</button>
-			<button class="controlBg textStyle" id="btn_PPRO18"
-				onClick="evalScript('$._PPP_.getnumAEProjectItems()')">AE project item count</button>
-			<button class="controlBg textStyle" id="btn_PPRO49"
-				onClick="evalScript('$._PPP_.turnOffStartDialog()')">Turn off Start dialog</button>
-			<button class="controlBg textStyle" id="btn_PPRO25" onClick="evalScript('$._PPP_.clearCache()')">Clear media
-				cache</button>
-			<button class="controlBg textStyle" id="btn_PPRO61" onClick="evalScript('$._PPP_.dumpAllPresets()')">List
-				available export presets</button>
-		</div>
-		<div>
-			<h2>Import and Create</h2>
-		</div>
-		<div id="section2" class="sectionID">
-			<button id="ingest">Ingest files, create proxies</button>
-			<button class="controlBg textStyle" id="btn_PPRO42" onClick="evalScript('$._PPP_.importMoGRT()')">Import
-				MoGRT</button>
-			<button class="controlBg textStyle" id="btn_PPRO2" onClick="evalScript('$._PPP_.createSequence()')">Create
-				Sequence</button>
-			<button class="controlBg textStyle" id="btn_PPRO37" onClick="evalScript('$._PPP_.importComps()')">Import
-				Composition(s) from AE project</button>
-			<button id="newseqfrompreset">Create Sequence From Preset</button>
-			<button class="controlBg textStyle" id="btn_PPRO3" onClick="evalScript('$._PPP_.openProject()')">Open
-				different project</button>
-			<button class="controlBg textStyle" id="btn_PPRO5" onClick="evalScript('$._PPP_.importFiles()')">Import
-				Files</button>
-			<button class="controlBg textStyle" id="btn_PPRO8" onClick="evalScript('$._PPP_.openInSource()')">Open in
-				Source Monitor...</button>
-			<button class="controlBg textStyle" id="btn_PPRO24" onClick="evalScript('$._PPP_.setProxiesON()')">Add proxy
-				to first projItem</button>
-			<p> </p>
-			<p> </p>
-			<div id="dragthing" draggable="true" ondragstart="dragHandler(event)">Drag and drop import</div>
-		</div>
-		<div>
-			<h2>Metadata and Project manipulation</h2>
-		</div>
-		<div id="section3" class="sectionID">
-			<button id="toggleproxy">Toggle proxies in active project</button>
-			<button class="controlBg textStyle" id="btn_PPRO9" onClick="evalScript('$._PPP_.replaceMedia()')">Replace
-				media...</button>
-			<button class="controlBg textStyle" id="btn_PPRO10"
-				onClick="evalScript('$._PPP_.createSequenceMarkers()')">Add sequence markers</button>
-			<button class="controlBg textStyle" id="btn_PPRO16" onClick="evalScript('$._PPP_.addClipMarkers()')">Add
-				clip markers</button>
-			<button class="controlBg textStyle" id="btn_PPRO17" onClick="evalScript('$._PPP_.updatePAR()')">Update
-				PAR</button>
-			<button class="controlBg textStyle" id="btn_PPRO11" onClick="evalScript('$._PPP_.mungeXMP()')">Manipulate
-				XMP</button>
-			<button class="controlBg textStyle" id="btn_PPRO14"
-				onClick="evalScript('$._PPP_.updateAllProjectItems()')">Update all media</button>
-			<button class="controlBg textStyle" id="btn_PPRO15"
-				onClick="evalScript('$._PPP_.modifyProjectMetadata()')">Modify project metadata</button>
-			<button class="controlBg textStyle" id="btn_PPRO23" onClick="evalScript('$._PPP_.setScratchDisk()')">Set
-				scratch disk path</button>
-			<button class="controlBg textStyle" id="btn_PPRO27"
-				onClick="evalScript('$._PPP_.randomizeSequenceSelection()')">Randomize sequence selection</button>
-			<button class="controlBg textStyle" id="btn_PPRO28" onClick="evalScript('$._PPP_.muteFun()')">Mute
-				fun!</button>
-			<button class="controlBg textStyle" id="btn_PPRO29"
-				onClick="evalScript('$._PPP_.onPlayWithKeyframes()')">Manipulate keyframes</button>
-			<button class="controlBg textStyle" id="btn_PPRO30" onClick="evalScript('$._PPP_.insertOrAppend()')">insert
-				or append to active sequence</button>
-			<button class="controlBg textStyle" id="btn_PPRO56"
-				onClick="evalScript('$._PPP_.insertOrAppendToTopTracks()')">insert or append, to top tracks</button>
-			<button class="controlBg textStyle" id="btn_PPRO31" onClick="evalScript('$._PPP_.overWrite()')">overwrite at
-				CTI</button>
-			<button class="controlBg textStyle" id="btn_PPRO36" onClick="evalScript('$._PPP_.changeLabel()')">Label
-				first projectItem</button>
-			<button class="controlBg textStyle" id="btn_PPRO21" onClick="evalScript('$._PPP_.addSubClip()')">Create
-				subclip</button>
-			<button class="controlBg textStyle" id="btn_PPRO44"
-				onClick="evalScript('$._PPP_.reportCurrentProjectSelection()')">Report selection to Events
-				panel</button>
-			<button class="controlBg textStyle" id="btn_PPRO43"
-				onClick="evalScript('$._PPP_.randomizeProjectSelection()')">Randomize project selection</button>
-			<button class="controlBg textStyle" id="btn_PPRO45" onClick="evalScript('$._PPP_.setOffline()')">Make
-				selected items offline</button>
-			<button class="controlBg textStyle" id="btn_PPRO47" onClick="evalScript('$._PPP_.setAllOnline()')">Online
-				all offline</button>
-			<button class="controlBg textStyle" id="btn_PPRO48" onClick="evalScript('$._PPP_.updateFrameRate()')">Update
-				framerate</button>
-			<button class="controlBg textStyle" id="btn_PPRO50"
-				onClick="evalScript('$._PPP_.changeMarkerColors()')">Change marker colors</button>
-			<button class="controlBg textStyle" id="btn_PPRO52"
-				onClick="evalScript('$._PPP_.changeSeqTimeCodeDisplay()')">Change sequence timecode display</button>
-			<button class="controlBg textStyle" id="btn_PPRO32"
-				onClick="evalScript('$._PPP_.saveCurrentProjectLayout()')">Save Project layout</button>
-			<button class="controlBg textStyle" id="btn_PPRO51"
-				onClick="evalScript('$._PPP_.setProjectPanelMeta()')">Load Project layout</button>
-			<button class="controlBg textStyle" id="btn_PPRO12"
-				onClick="evalScript('$._PPP_.exportSequenceAsPrProj()')">New project from sequence</button>
-			<button class="controlBg textStyle" id="btn_PPRO73"
-				onClick="evalScript('$._PPP_.autoReframeActiveSequence()')">Auto-reframe active sequence</button>
-			<h2>Export</h2>
-		</div>
-		<div id="section4" class="sectionID">
-			<button id="transcodeusingdefaultpreset">Transcode first project item</button>
-			<button id="transcodeexternal">Transcode external file</button>
-			<button id="saveaspng">Save sequence frame as .png</button>
-			<button class="controlBg textStyle" id="btn_PPRO41"
-				onClick="evalScript('$._PPP_.consolidateProject()')">Consolidate & Transfer project</button>
-			<button class="controlBg textStyle" id="btn_PPRO20"
-				onClick="evalScript('$._PPP_.dumpXMPFromAllProjectItems()')">Dump XMP from all items</button>
-			<button class="controlBg textStyle" id="btn_PPRO34" onClick="evalScript('$._PPP_.saveProjectCopy()')">Save
-				project copy...</button>
-			<button class="controlBg textStyle" id="btn_PPRO4" onClick="evalScript('$._PPP_.saveProject()')">Save
-				project</button>
-			<button class="controlBg textStyle" id="btn_PPRO26"
-				onClick="evalScript('$._PPP_.exportFramesForMarkers()')">Export frames for markers</button>
-			<button class="controlBg textStyle" id="btn_PPRO6" onClick="evalScript('$._PPP_.exportFCPXML()')">Export FCP
-				XML</button>
-			<button class="controlBg textStyle" id="btn_PPRO22" onClick="evalScript('$._PPP_.exportAAF()')">Export
-				sequence to AAF</button>
-			<button id="renderusingdefaultpreset">Render active sequence in AME</button>
-		</div>
+                <div class="panel-card">
+                    <h2>Render</h2>
+                    <div class="path-row">
+                        <span class="path-chip">Preset: <span id="renderPresetPath">[not set]</span></span>
+                    </div>
+                    <div class="button-grid">
+                        <button class="controlBg textStyle" id="pickRenderPreset">Pick preset (.epr)</button>
+                        <button class="controlBg textStyle" id="clearRenderPreset">Clear preset</button>
+                    </div>
+                    <div class="path-row">
+                        <span class="path-chip">Output: <span id="renderOutputPath">[not set]</span></span>
+                    </div>
+                    <div class="button-grid">
+                        <button class="controlBg textStyle" id="pickRenderOutput">Pick output folder</button>
+                        <button class="controlBg textStyle" id="clearRenderOutput">Clear output</button>
+                    </div>
+                </div>
+            </div>
+            <div id="dragthing" draggable="true" ondragstart="dragHandler(event)" class="ghost-drag">Drag and drop import</div>
+        </div>
+    </div>
 </body>
-<script>
-	document.body.onbeforeunload = function () {
-		var csInterface = new CSInterface();
-		var OSVersion = csInterface.getOSInformation();
-		var appVersion = csInterface.hostEnvironment.appVersion;
-		var versionAsFloat = parseFloat(appVersion);
-
-		csInterface.evalScript('$._PPP_.closeLog()');
-
-		if (versionAsFloat < 10.3) {
-			var path = "file:///Library/Application Support/Adobe/CEP/extensions/AmazePanel/payloads/onbeforeunload.html";
-
-			if (OSVersion.indexOf("Windows") >= 0) {
-				path = "file:///C:/Program%20Files%20(x86)/Common%20Files/Adobe/CEP/extensions/AmazePanel/payloads/onbeforeunload.html"
-			}
-			csInterface.openURLInDefaultBrowser(path);
-		}
-	};
-</script>
 
 </html>
