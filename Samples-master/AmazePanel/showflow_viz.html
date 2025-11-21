@@ -285,6 +285,28 @@
             cursor: pointer;
         }
 
+        .marker-delete {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 16px;
+            height: 16px;
+            background: #ff4444;
+            color: white;
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: bold;
+            line-height: 16px;
+            text-align: center;
+            cursor: pointer;
+            display: none;
+            z-index: 100;
+        }
+
+        .marker-pin:hover .marker-delete {
+            display: block;
+        }
+
         .playhead {
             position: absolute;
             top: 0;
@@ -1766,6 +1788,19 @@
                     startMarkerDrag(idx, pixelsPerFrame, e);
                 };
 
+                // Edit mode: add delete button for middle markers
+                if (isEditMode && idx > 0 && idx < markers.length - 1) {
+                    var delBtn = document.createElement("div");
+                    delBtn.className = "marker-delete";
+                    delBtn.textContent = "\u00D7";
+                    delBtn.title = "Delete Marker";
+                    delBtn.onclick = function (e) {
+                        e.stopPropagation();
+                        deleteMarker(idx);
+                    };
+                    pin.appendChild(delBtn);
+                }
+
                 var lbl = document.createElement("div");
                 lbl.className = "marker-label";
                 lbl.style.left = (m * pixelsPerFrame) + "px";
@@ -2279,6 +2314,62 @@
                 s.time = runningTime;
                 runningTime += (s.duration || 0);
             });
+            render(currentData);
+        }
+
+        function deleteMarker(markerIdx) {
+            if (!currentData || !currentData.slots) return;
+
+            if (markerIdx <= 0) {
+                alert("Cannot delete the first marker (start point).");
+                return;
+            }
+
+            var markers = collectMarkers(currentData);
+            if (markerIdx >= markers.length - 1) {
+                alert("Cannot delete the end marker.");
+                return;
+            }
+
+            var slotIdx = markerIdx - 1;
+            if (slotIdx < 0 || slotIdx >= currentData.slots.length - 1) {
+                alert("Invalid marker position.");
+                return;
+            }
+
+            var currentSlot = currentData.slots[slotIdx];
+            var nextSlot = currentData.slots[slotIdx + 1];
+            if (!currentSlot || !nextSlot) {
+                alert("Invalid marker position.");
+                return;
+            }
+
+            if (!confirm("Delete this marker?\n\nSlots will be merged:\n- Slot " + slotIdx + " + Slot " + (slotIdx + 1) + "\n\nConflicting clips will use the second slot's version.")) {
+                return;
+            }
+
+            var currentDur = getSlotDuration(currentData, slotIdx) || 0;
+            var nextDur = getSlotDuration(currentData, slotIdx + 1) || 0;
+            var mergedDur = currentDur + nextDur;
+
+            if (!currentSlot.clips) currentSlot.clips = {};
+
+            if (nextSlot.clips) {
+                Object.keys(nextSlot.clips).forEach(function (trackKey) {
+                    currentSlot.clips[trackKey] = nextSlot.clips[trackKey];
+                });
+            }
+
+            currentSlot.duration = mergedDur;
+
+            if (nextSlot.name && !currentSlot.name) {
+                currentSlot.name = nextSlot.name;
+            } else if (nextSlot.name && currentSlot.name) {
+                currentSlot.name = currentSlot.name + " + " + nextSlot.name;
+            }
+
+            currentData.slots.splice(slotIdx + 1, 1);
+            recalcSlotTimes(slotIdx);
             render(currentData);
         }
 
