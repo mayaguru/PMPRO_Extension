@@ -412,8 +412,8 @@
         .timeline-clip {
             position: absolute;
             height: 90%;
-            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
-            border: 1px solid #5aa3ff;
+            background: linear-gradient(135deg, #2f4b75 0%, #273d62 100%);
+            border: 1px solid #2d456d;
             box-sizing: border-box;
             border-radius: 3px;
             display: flex;
@@ -423,18 +423,32 @@
             transition: all 0.15s;
             overflow: hidden;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .timeline-clip:hover {
-            background: linear-gradient(135deg, #5aa3ff 0%, #4a90e2 100%);
-            border-color: #7bb8ff;
+            background: linear-gradient(135deg, #3b5f9f 0%, #2f4f82 100%);
+            border-color: #3a5b94;
             box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
             z-index: 5;
+        }
+
+        .clip-card.selected,
+        .timeline-clip.selected {
+            outline: 2px solid #ff9b42;
+            box-shadow: 0 0 10px rgba(255, 155, 66, 0.4);
         }
 
         .timeline-clip.dragging {
             opacity: 0.6;
             z-index: 100;
+        }
+
+        .clip-card *,
+        .timeline-clip * {
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .clip-content {
@@ -655,6 +669,8 @@
             transition: all 0.2s;
             position: relative;
             overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .clip-card:hover {
@@ -680,6 +696,8 @@
             max-width: 100%;
             line-height: 1.2;
             text-shadow: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .clip-card .clip-meta {
@@ -859,6 +877,71 @@
         var playheadContainerId = "playhead-container";
         var playheadLineId = "playhead-line";
         var playheadLocalStamp = 0;
+        var selectedClips = {};
+        var lastSelectedKey = null;
+
+        function clipKey(sIdx, trKey) {
+            return sIdx + "__" + trKey;
+        }
+
+        function isClipSelected(key) {
+            return !!(selectedClips && selectedClips[key]);
+        }
+
+        function refreshSelectionStyles() {
+            var nodes = document.querySelectorAll("[data-clip-key]");
+            nodes.forEach(function (el) {
+                var key = el.dataset.clipKey;
+                if (isClipSelected(key)) {
+                    el.classList.add("selected");
+                } else {
+                    el.classList.remove("selected");
+                }
+            });
+        }
+
+        function selectRowClips(sIdx, append) {
+            if (!currentData || !currentData.slots || !currentData.slots[sIdx]) return;
+            var slot = currentData.slots[sIdx];
+            var keys = deriveTrackKeys(currentData);
+            if (!append) {
+                selectedClips = {};
+            } else if (!selectedClips) {
+                selectedClips = {};
+            }
+            keys.forEach(function (trKey) {
+                if (slot.clips && slot.clips[trKey]) {
+                    selectedClips[clipKey(sIdx, trKey)] = true;
+                }
+            });
+            refreshSelectionStyles();
+        }
+
+        function handleClipSelection(e, sIdx, trKey) {
+            if (e && e.preventDefault) {
+                // Avoid browser text selection when shift/ctrl clicking clips
+                e.preventDefault();
+            }
+            var key = clipKey(sIdx, trKey);
+            var isToggle = e.ctrlKey || e.metaKey;
+            var isAdd = e.shiftKey;
+
+            if (!isToggle && !isAdd) {
+                selectedClips = {};
+                selectedClips[key] = true;
+            } else if (isToggle) {
+                if (selectedClips[key]) {
+                    delete selectedClips[key];
+                } else {
+                    selectedClips[key] = true;
+                }
+            } else if (isAdd) {
+                selectedClips[key] = true;
+            }
+
+            lastSelectedKey = key;
+            refreshSelectionStyles();
+        }
 
         function getFlowConfigPath() {
             var osVersion = csInterface.getOSInformation();
@@ -1194,6 +1277,7 @@
             } else {
                 renderVertical(data);
             }
+            refreshSelectionStyles();
         }
 
         function deleteTrack(trKey) {
@@ -1430,7 +1514,12 @@
 
         function createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps, slotDuration, slotStartOverride) {
             var clip = document.createElement("div");
+            var key = clipKey(sIdx, trKey);
             clip.className = "timeline-clip";
+            clip.setAttribute("data-clip-key", key);
+            if (isClipSelected(key)) {
+                clip.classList.add("selected");
+            }
 
             var cName = clipData.name || clipData;
             var effectiveSlotDur = slotDuration || (slot ? slot.duration : 0);
@@ -1475,9 +1564,16 @@
 
             // Double-click to edit (only in edit mode)
             clip.ondblclick = function (e) {
-                if (isEditMode) {
-                    openEdit(sIdx, trKey, clipData);
+                if (e.shiftKey) {
+                    selectRowClips(sIdx, true); // additive row select
+                    return;
                 }
+                selectRowClips(sIdx, false); // replace selection
+                if (isEditMode) openEdit(sIdx, trKey, clipData);
+            };
+
+            clip.onclick = function (e) {
+                handleClipSelection(e, sIdx, trKey);
             };
 
             return clip;
@@ -1603,6 +1699,12 @@
             card.className = "clip-card" + (clipData ? "" : " empty");
 
             if (clipData) {
+                var key = clipKey(sIdx, trKey);
+                card.setAttribute("data-clip-key", key);
+                if (isClipSelected(key)) {
+                    card.classList.add("selected");
+                }
+
                 card.draggable = isEditMode;
                 card.ondragstart = function (e) {
                     if (!isEditMode) return;
@@ -1624,7 +1726,16 @@
                     "<div class='clip-name'>" + cName + "</div>" +
                     "<div class='clip-meta'>" + cDur + "f</div>";
 
-                card.ondblclick = function () {
+                card.onclick = function (e) {
+                    handleClipSelection(e, sIdx, trKey);
+                };
+
+                card.ondblclick = function (e) {
+                    if (e.shiftKey) {
+                        selectRowClips(sIdx, true); // add row to current selection
+                        return;
+                    }
+                    selectRowClips(sIdx, false); // replace selection with this row
                     if (isEditMode) openEdit(sIdx, trKey, clipData);
                 };
             } else {
