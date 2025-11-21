@@ -55,31 +55,25 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 16px;
+            padding: 4px 8px;
             background: #2a2a2a;
             border-bottom: 1px solid #3a3a3a;
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.35);
-            gap: 12px;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.35);
+            gap: 8px;
             flex-shrink: 0;
         }
 
         .title-block h1 {
             margin: 0;
-            font-size: 16px;
+            font-size: 14px;
             color: #eee;
-            letter-spacing: 0.4px;
+            letter-spacing: 0.3px;
         }
 
-        .title-block small {
-            color: var(--muted);
-            display: block;
-            margin-top: 2px;
-            font-size: 11px;
-        }
 
         .tab-bar {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             align-items: center;
             flex-wrap: wrap;
         }
@@ -88,12 +82,13 @@
             background: #333;
             border: 1px solid #444;
             color: var(--text);
-            padding: 8px 12px;
-            border-radius: 8px;
+            padding: 4px 8px;
+            border-radius: 6px;
             font-weight: 700;
             cursor: pointer;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.2px;
             transition: all 0.12s ease;
+            font-size: 10.5px;
         }
 
         .tab-btn:hover {
@@ -104,7 +99,7 @@
             background: linear-gradient(135deg, var(--accent), var(--accent-strong));
             color: #111;
             border-color: var(--accent);
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.4);
         }
 
         .status-bar {
@@ -254,10 +249,11 @@
 
         .pill-btn {
             border-radius: 999px;
-            padding: 8px 12px;
+            padding: 4px 8px;
             background: #262626;
             border-color: #3d3d3d;
             color: var(--text);
+            font-size: 10.5px;
         }
 
         .pill-btn.primary {
@@ -637,14 +633,13 @@
 <body onLoad="onLoaded()" class="theme-showflow">
     <div id="header">
         <div class="title-block">
-            <h1>Amaze Panel</h1>
-            <small>시각 편집 + 스크립트 + 폴더 설정</small>
+            <h1>AMAZE PANEL</h1>
         </div>
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="showflow">Showflow Editor</button>
+            <button class="tab-btn" data-tab="settings">Folder Setting</button>
             <button class="tab-btn" data-tab="scripts">Scripts</button>
-            <button class="tab-btn" data-tab="settings">Settings / Folders</button>
-            <button class="pill-btn" id="refreshShowflow">Refresh Panel</button>
+            <button class="tab-btn pill-btn" id="refreshShowflow">Refresh Panel</button>
         </div>
     </div>
 
