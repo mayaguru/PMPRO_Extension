@@ -1,0 +1,458 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Showflow Visual Editor</title>
+    <script src="./lib/CSInterface.js"></script>
+    <script src="./lib/jquery-1.9.1.js"></script>
+    <link href="css/style.css" rel="stylesheet" type="text/css">
+    <style>
+        body {
+            background-color: #232323;
+            color: #b5b5b5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #header {
+            background-color: #333;
+            padding: 10px 20px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        #header h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #eee;
+        }
+
+        #controls button {
+            background: #444;
+            border: 1px solid #555;
+            color: #ddd;
+            padding: 5px 10px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        #controls button:hover {
+            background: #555;
+        }
+
+        #controls button.primary {
+            background: #0078d7;
+            border-color: #005a9e;
+            color: white;
+        }
+
+        #main-container {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            padding: 20px;
+            position: relative;
+        }
+
+        /* Timeline / Grid Layout */
+        .timeline-grid {
+            display: grid;
+            grid-template-columns: 100px; /* Time Column */
+            /* Remaining columns generated dynamically based on tracks */
+            gap: 10px;
+            width: 100%;
+        }
+
+        /* Time Column */
+        .time-col {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            padding-right: 15px;
+            border-right: 1px solid #444;
+        }
+
+        .time-marker {
+            height: 120px; /* Fixed height for slot visualization */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-size: 12px;
+            color: #888;
+            text-align: right;
+        }
+        
+        .time-marker .dur {
+            font-size: 10px;
+            color: #555;
+            margin-top: 4px;
+        }
+
+        /* Track Columns Container */
+        .tracks-container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .track-col {
+            display: flex;
+            flex-direction: column;
+            width: 200px;
+            min-width: 200px;
+        }
+
+        .track-header {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 5px;
+            background: #333;
+            border-radius: 4px;
+        }
+
+        .slot-cell {
+            height: 120px; /* Match time-marker height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        .clip-card {
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 6px;
+            width: 100%;
+            height: 90%;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .clip-card:hover {
+            background: #444;
+            border-color: #777;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .clip-card.empty {
+            background: transparent;
+            border: 1px dashed #444;
+            opacity: 0.5;
+        }
+        
+        .clip-card.selected {
+            border-color: #0078d7;
+            background: #2b3c4d;
+        }
+
+        .clip-name {
+            font-weight: bold;
+            font-size: 13px;
+            color: #fff;
+            text-align: center;
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+
+        .clip-meta {
+            font-size: 11px;
+            color: #aaa;
+        }
+
+        /* Modal */
+        #edit-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            width: 300px;
+            border: 1px solid #555;
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #ddd;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 6px;
+            background: #1e1e1e;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <h1>Showflow Visual Editor</h1>
+        <div id="controls">
+            <button onclick="window.location.href='index.html'">Back</button>
+            <button onclick="loadData()">Reload</button>
+            <button class="primary" onclick="saveData()">Save Changes</button>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div class="timeline-grid" id="grid-root">
+            <!-- Dynamic Content -->
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal">
+        <div class="modal-content">
+            <h2>Edit Clip</h2>
+            <div class="form-group">
+                <label>Clip Name</label>
+                <input type="text" id="edit-name">
+            </div>
+            <div class="form-group">
+                <label>Duration (frames)</label>
+                <input type="number" id="edit-duration">
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="primary" onclick="applyEdit()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var csInterface = new CSInterface();
+        var currentData = null;
+        var currentFilePath = null;
+        var editingTarget = null; // { slotIndex, trackKey }
+
+        function getFlowConfigPath() {
+            var osVersion = csInterface.getOSInformation();
+            var isWin = osVersion && osVersion.indexOf("Windows") >= 0;
+            var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+            if (isWin) extRoot = extRoot.replace(/\//g, "\\\\");
+            var sep = isWin ? "\\\\" : "/";
+            return extRoot + sep + "flow_config.json";
+        }
+
+        function loadData() {
+            // 1. Read Config
+            var cfgPath = getFlowConfigPath();
+            var res = window.cep.fs.readFile(cfgPath);
+            if (res.err !== 0) {
+                alert("Could not read flow_config.json");
+                return;
+            }
+            var cfg = JSON.parse(res.data);
+            if (!cfg.flowPath) {
+                alert("No Flow Path set in config.");
+                return;
+            }
+
+            currentFilePath = cfg.flowPath;
+            
+            // 2. Read Showflow JSON
+            var flowRes = window.cep.fs.readFile(currentFilePath);
+            if (flowRes.err !== 0) {
+                alert("Could not read Showflow JSON at: " + currentFilePath);
+                return;
+            }
+
+            try {
+                currentData = JSON.parse(flowRes.data);
+                render(currentData);
+            } catch(e) {
+                alert("Error parsing JSON: " + e);
+            }
+        }
+
+        function saveData() {
+            if (!currentFilePath || !currentData) return;
+            var json = JSON.stringify(currentData, null, 2);
+            var res = window.cep.fs.writeFile(currentFilePath, json);
+            if (res.err === 0) {
+                alert("Saved successfully!");
+            } else {
+                alert("Error saving file: " + res.err);
+            }
+        }
+
+        function framesToTimecode(frames, fps) {
+            // Simple MM:SS:FF for now
+            var totalSeconds = Math.floor(frames / fps);
+            var ff = frames % fps;
+            var mm = Math.floor(totalSeconds / 60);
+            var ss = totalSeconds % 60;
+            return pad(mm) + ":" + pad(ss) + ":" + pad(ff);
+        }
+
+        function pad(n) { return n < 10 ? "0" + n : n; }
+
+        function render(data) {
+            var root = document.getElementById("grid-root");
+            root.innerHTML = "";
+
+            var fps = data.fps || 60;
+            var tracks = data.tracks || { "A":0 };
+            var sortedTracks = Object.keys(tracks).sort();
+
+            // 1. Setup Grid Columns
+            // Time Col + One Col per Track
+            var colTemplate = "100px";
+            sortedTracks.forEach(function() { colTemplate += " 200px"; });
+            root.style.gridTemplateColumns = colTemplate;
+
+            // 2. Headers
+            // Empty cell for time header
+            var timeHeader = document.createElement("div");
+            timeHeader.className = "time-col";
+            timeHeader.innerHTML = "<div class='track-header'>Time</div>";
+            root.appendChild(timeHeader);
+
+            sortedTracks.forEach(function(tr) {
+                var th = document.createElement("div");
+                th.className = "track-header";
+                th.textContent = "Track " + tr;
+                root.appendChild(th);
+            });
+
+            // 3. Slots
+            if (data.slots) {
+                data.slots.forEach(function(slot, sIdx) {
+                    // Time Cell
+                    var timeCell = document.createElement("div");
+                    timeCell.className = "time-marker";
+                    timeCell.innerHTML = "<span>" + framesToTimecode(slot.time, fps) + "</span>" + 
+                                         "<span class='dur'>Dur: " + slot.duration + "f</span>";
+                    root.appendChild(timeCell);
+
+                    // Track Cells
+                    sortedTracks.forEach(function(trKey) {
+                        var cell = document.createElement("div");
+                        cell.className = "slot-cell";
+                        
+                        var clipData = slot.clips ? slot.clips[trKey] : null;
+                        var card = document.createElement("div");
+                        card.className = "clip-card" + (clipData ? "" : " empty");
+                        
+                        if (clipData) {
+                            var cName = clipData.name || clipData; // handle string or object
+                            var cDur = clipData.duration || slot.duration;
+                            
+                            card.innerHTML = "<div class='clip-name'>" + cName + "</div>" +
+                                             "<div class='clip-meta'>" + cDur + "f</div>";
+                            
+                            card.onclick = function() {
+                                openEdit(sIdx, trKey, clipData);
+                            };
+                        } else {
+                            card.innerHTML = "<div class='clip-meta'>+</div>";
+                            card.onclick = function() {
+                                // Create new clip entry
+                                var newClip = { name: "NewClip", duration: slot.duration, in: 0, out: slot.duration };
+                                if (!slot.clips) slot.clips = {};
+                                slot.clips[trKey] = newClip;
+                                render(currentData); // Re-render to show new clip
+                            };
+                        }
+
+                        cell.appendChild(card);
+                        root.appendChild(cell);
+                    });
+                });
+            }
+        }
+
+        function openEdit(sIdx, trKey, clipData) {
+            editingTarget = { sIdx: sIdx, trKey: trKey };
+            var cName = clipData.name || clipData;
+            var cDur = clipData.duration || 0;
+
+            document.getElementById("edit-name").value = cName;
+            document.getElementById("edit-duration").value = cDur;
+            
+            document.getElementById("edit-modal").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("edit-modal").style.display = "none";
+            editingTarget = null;
+        }
+
+        function applyEdit() {
+            if (!editingTarget) return;
+            var sIdx = editingTarget.sIdx;
+            var trKey = editingTarget.trKey;
+            
+            var newName = document.getElementById("edit-name").value;
+            var newDur = parseInt(document.getElementById("edit-duration").value, 10);
+
+            var slot = currentData.slots[sIdx];
+            if (slot && slot.clips && slot.clips[trKey]) {
+                var c = slot.clips[trKey];
+                if (typeof c === "string") {
+                    // Convert to object if it was string
+                    slot.clips[trKey] = { name: newName, duration: newDur, in: 0, out: newDur };
+                } else {
+                    c.name = newName;
+                    c.duration = newDur;
+                }
+            }
+            
+            closeModal();
+            render(currentData);
+        }
+
+        // Init
+        $(document).ready(function() {
+            loadData();
+        });
+
+    </script>
+</body>
+</html>

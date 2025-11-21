@@ -541,6 +541,10 @@
 					csInterface.evalScript(whole_megillah);
 				}
 			});
+			$("#openViz").on("click", function (e) {
+				e.preventDefault();
+				window.location.href = "showflow_viz.html";
+			});
 		});
 	</script>
 </head>
@@ -566,6 +570,7 @@
 		<h2>Flow file</h2>
 		<p id="flowPath">[not set]</p>
 		<button class="controlBg textStyle" id="pickFlow">Pick flow JSON</button>
+		<button class="controlBg textStyle" id="openViz">Visual Editor</button>
 		<button class="controlBg textStyle" id="clearFlow">Clear</button>
 	</div>
 
