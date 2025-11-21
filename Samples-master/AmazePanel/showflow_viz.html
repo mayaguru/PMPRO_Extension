@@ -104,6 +104,27 @@
             align-items: center; /* vertically center the timeline stack */
         }
 
+        #tools-bar {
+            background: #202020;
+            border-bottom: 1px solid #333;
+            padding: 6px 15px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .tool-group {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .group-label {
+            font-size: 11px;
+            color: #aaa;
+            margin-right: 4px;
+        }
+
         /* Vertical Layout (Tree View) */
         .timeline-grid {
             display: grid;
@@ -662,7 +683,7 @@
 
     <div id="header">
         <h1>Showflow Visual Editor</h1>
-            <div id="controls">
+        <div id="controls">
             <div class="slider-control" id="zoom-control" style="display:none;">
                 <label title="Timeline Zoom">Zoom</label>
                 <input type="range" id="zoom-slider" min="0.2" max="1.5" step="0.1" value="1">
@@ -678,6 +699,14 @@
             <button onclick="window.location.href='index.html'">Back</button>
             <button onclick="loadData()">Reload</button>
             <button class="primary" onclick="saveData()">Save Changes</button>
+        </div>
+    </div>
+
+    <div id="tools-bar">
+        <div class="tool-group">
+            <span class="group-label">Markers → Sequence</span>
+            <button onclick="pushMarkersToSequence('append')">Append</button>
+            <button onclick="pushMarkersToSequence('replace')">Replace All</button>
         </div>
     </div>
 
@@ -1509,6 +1538,60 @@
             });
             closeMarkerModal();
             render(currentData);
+        }
+
+        function pushMarkersToSequence(mode) {
+            if (!currentData) {
+                alert("No flow loaded.");
+                return;
+            }
+            var markers = collectMarkers(currentData);
+            if (markers.length === 0) {
+                alert("No markers in current data.");
+                return;
+            }
+            var fps = currentData.fps || 60;
+            var payload = [];
+            markers.forEach(function (m, idx) {
+                var slotIdx = Math.min(idx, currentData.slots.length - 1);
+                var slot = currentData.slots[slotIdx];
+                var name = "";
+                if (slot) {
+                    if (slot.name) name = slot.name;
+                    else if (slot.clips) {
+                        var firstKey = Object.keys(slot.clips)[0];
+                        var clipVal = slot.clips[firstKey];
+                        if (clipVal && typeof clipVal === "object" && clipVal.name) name = clipVal.name;
+                        else if (typeof clipVal === "string") name = clipVal;
+                    }
+                }
+                payload.push({ frame: m, name: name || ("Marker " + (idx + 1)) });
+            });
+
+            var jsx = "(function(){\n" +
+                "var data = JSON.parse(decodeURIComponent('" + encodeURIComponent(JSON.stringify({ mode: mode, fps: fps, markers: payload })) + "'));\n" +
+                "if(!app.project || !app.project.activeSequence){return 'No active sequence';}\n" +
+                "var seq = app.project.activeSequence;\n" +
+                "var fps = data.fps || 60;\n" +
+                "function frameToSeconds(fr){return fr / fps;}\n" +
+                "if(data.mode==='replace' && seq.markers){while(seq.markers.numMarkers>0){seq.markers.deleteMarker(seq.markers.getFirstMarker());}}\n" +
+                "if(!seq.markers){return 'Sequence has no marker collection';}\n" +
+                "for(var i=0;i<data.markers.length;i++){\n" +
+                " var mk = data.markers[i];\n" +
+                " var tSec = frameToSeconds(mk.frame||0);\n" +
+                " var m = seq.markers.createMarker(tSec);\n" +
+                " m.name = mk.name || ('Marker ' + (i+1));\n" +
+                "}\n" +
+                "return 'ok';\n" +
+                "})();";
+
+            csInterface.evalScript(jsx, function (res) {
+                if (res === 'ok') {
+                    alert('Markers pushed to active sequence (' + mode + ').');
+                } else {
+                    alert('Marker push result: ' + res);
+                }
+            });
         }
 
         $(document).ready(function () {
