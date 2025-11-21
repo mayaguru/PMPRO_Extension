@@ -1,180 +1,702 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 
 <head>
-    <meta charset="utf-8">
-    <title>Premiere VR Stream</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <!-- Optional: Stereo component for 3D video support -->
-    <script src="https://unpkg.com/aframe-stereo-component/dist/aframe-stereo-component.min.js"></script>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>VR Streamer · Quest Viewer</title>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <style>
-        #ui {
+        :root {
+            color-scheme: dark;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Noto Sans KR', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #050505;
+            color: #f5f5f5;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at top, #10131c, #050505);
+        }
+
+        #vrCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #ui-overlay {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 999;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            color: white;
-            border-radius: 5px;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 22px 32px 12px;
+            background: linear-gradient(180deg, rgba(10, 10, 10, 0.9), rgba(10, 10, 10, 0.2));
+            pointer-events: auto;
+        }
+
+        .title-block h1 {
+            font-size: 28px;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .title-block p {
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .status-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(0, 0, 0, 0.55);
+        }
+
+        .status-chip .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .status-chip.online .dot {
+            background: #2ecc71;
+            border-color: #16854a;
+        }
+
+        .status-chip.offline .dot {
+            background: #ff6b6b;
+            border-color: #c0392b;
+        }
+
+        .status-chip.warning .dot {
+            background: #f5a623;
+            border-color: #d68910;
+        }
+
+        #network-speed-indicator {
+            position: absolute;
+            top: 24px;
+            right: 32px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 22px;
+            border-radius: 16px;
+            background: rgba(4, 10, 25, 0.78);
+            border: 1px solid rgba(79, 195, 247, 0.35);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.45);
+            pointer-events: auto;
+        }
+
+        .speed-icon {
+            font-size: 26px;
+            color: #4fc3f7;
+        }
+
+        .speed-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 160px;
+        }
+
+        .speed-value {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .speed-label {
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+        }
+
+        .speed-latency {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        #ui-toggle-corner-btn {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            font-size: 16px;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #ui-toggle-corner-btn:hover {
+            transform: scale(1.08);
+            border-color: #4fc3f7;
+        }
+
+        body.overlay-hidden #header,
+        body.overlay-hidden #control-panel,
+        body.overlay-hidden #network-speed-indicator {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #control-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 24px 30px 32px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+            pointer-events: auto;
+        }
+
+        .panel-card {
+            background: rgba(0, 0, 0, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-card h3 {
+            font-size: 16px;
+            letter-spacing: 0.08em;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         button {
-            padding: 5px 10px;
+            pointer-events: auto;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
             cursor: pointer;
+            transition: transform 0.1s, background 0.2s, opacity 0.2s;
+        }
+
+        .primary-btn {
+            background: linear-gradient(135deg, #2e8bff, #1f6ad7);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .ghost-btn {
+            background: rgba(255, 255, 255, 0.08);
+            color: #eee;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .slider-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.25);
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #2e8bff;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+        }
+
+        #instruction-list {
+            font-size: 13px;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.85);
+            list-style: decimal;
+            padding-left: 18px;
+        }
+
+        #mini-preview {
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: #000;
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+        }
+
+        #log {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            max-height: 90px;
+            overflow: hidden;
+        }
+
+        @media (max-width: 1024px) {
+            #header {
+                flex-direction: column;
+                gap: 14px;
+            }
+
+            #network-speed-indicator {
+                position: static;
+                margin: 16px 32px 0 auto;
+            }
+
+            #control-panel {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div id="ui">
-        <h3>VR Stream Control</h3>
-        <button onclick="toggleStereo()">Toggle Stereo (SBS)</button>
-        <p id="vr-status">Waiting for server...</p>
+    <div id="canvas-container">
+        <canvas id="vrCanvas"></canvas>
+        <div id="ui-overlay">
+            <div id="header">
+                <div class="title-block">
+                    <h1>VR Streamer</h1>
+                    <p>Premiere Monitor → Quest WebXR</p>
+                </div>
+                <div class="status-group">
+                    <div class="status-chip offline" id="serverStatusChip">
+                        <span class="dot"></span>
+                        <span id="serverStatusLabel">Server offline</span>
+                    </div>
+                    <div class="status-chip" id="vrModeChip">
+                        <span class="dot" style="background:#4fc3f7;border-color:#1d9ce5;"></span>
+                        <span id="vrModeLabel">Desktop Preview</span>
+                    </div>
+                    <div class="status-chip" id="ipChip">
+                        <span class="dot" style="background:#feb72b;border-color:#b37400;"></span>
+                        <span id="ipLabel">IP: -</span>
+                    </div>
+                </div>
+            </div>
+
+            <button id="ui-toggle-corner-btn" title="UI 숨기기">◐</button>
+
+            <div id="network-speed-indicator">
+                <div class="speed-icon">⇅</div>
+                <div class="speed-text">
+                    <span class="speed-label">STREAM BANDWIDTH</span>
+                    <span class="speed-value" id="networkSpeed">-- Mbps</span>
+                </div>
+                <div class="speed-latency" id="networkLatency">Latency -- ms</div>
+            </div>
+
+            <div id="control-panel">
+                <div class="panel-card">
+                    <h3>Immersion</h3>
+                    <div class="button-row" style="margin-bottom:12px;">
+                        <button class="primary-btn" id="enterVrBtn">Enter VR</button>
+                        <button class="ghost-btn" id="recenterBtn">Re-center</button>
+                        <button class="ghost-btn" id="toggleEnvBtn">Toggle Lights</button>
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Screen Distance</span>
+                            <span id="distanceValue">3.2m</span>
+                        </div>
+                        <input type="range" id="distanceSlider" min="2" max="5" step="0.1" value="3.2">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Curvature</span>
+                            <span id="curvatureValue">0%</span>
+                        </div>
+                        <input type="range" id="curvatureSlider" min="0" max="100" value="0">
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <h3>Stream</h3>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Frame Rate</span>
+                            <span id="fpsValue">24 FPS</span>
+                        </div>
+                        <input type="range" id="fpsSlider" min="5" max="45" value="24">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Sharpness</span>
+                            <span id="qualityValue">80%</span>
+                        </div>
+                        <input type="range" id="qualitySlider" min="40" max="95" value="80">
+                    </div>
+                    <div class="button-row" style="margin-top:8px;">
+                        <button class="ghost-btn" id="refreshHealthBtn">Check Health</button>
+                        <button class="ghost-btn" id="togglePreviewBtn">Toggle Preview</button>
+                    </div>
+                    <p style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:12px;" id="vrStatusMessage">
+                        서버에 연결 중입니다...
+                    </p>
+                </div>
+
+                <div class="panel-card">
+                    <h3>Quest Checklist</h3>
+                    <ul id="instruction-list">
+                        <li>PC와 Quest가 동일 네트워크인지 확인</li>
+                        <li>헤드셋 브라우저에서 <code id="questUrl">http://&lt;IP&gt;:5000</code> 접속</li>
+                        <li>페이지가 열리면 "Enter VR"을 눌러 WebXR 세션 시작</li>
+                        <li>프레임이 느리면 FPS 혹은 품질 슬라이더로 조절</li>
+                    </ul>
+                    <img id="mini-preview" alt="Stream preview">
+                </div>
+
+                <div class="panel-card">
+                    <h3>Telemetry</h3>
+                    <div id="log">Ready.</div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <a-scene>
-        <a-assets>
-            <!-- The video feed from our Python server -->
-            <!-- We use an img tag because MJPEG is technically a sequence of images, 
-             but A-Frame handles it better as a texture on a plane -->
-            <img id="stream" src="/video_feed" crossorigin="anonymous">
-        </a-assets>
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+        import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/webxr/VRButton.js';
 
-        <!-- Camera -->
-        <a-entity camera look-controls wasd-controls position="0 1.6 0">
-            <!-- Left Eye Camera (for stereo) -->
-            <a-entity camera="active: false" stereo="eye:left"></a-entity>
-            <!-- Right Eye Camera (for stereo) -->
-            <a-entity camera="active: false" stereo="eye:right"></a-entity>
-        </a-entity>
+        const canvas = document.getElementById('vrCanvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
 
-        <!-- Screen Plane -->
-        <!-- Positioned in front of the user -->
-        <a-plane id="screen-mono" src="#stream" position="0 1.6 -2" width="3.2" height="1.8" color="#FFF" shader="flat">
-        </a-plane>
+        const vrButton = VRButton.createButton(renderer);
+        vrButton.style.display = 'none';
+        document.body.appendChild(vrButton);
 
-        <!-- Stereo Planes (Hidden by default) -->
-        <!-- Left Eye Image -->
-        <a-plane id="screen-left" visible="false" src="#stream" position="0 1.6 -2" width="3.2" height="1.8"
-            stereo="eye:left" shader="flat">
-            <!-- Adjust UVs for SBS Left: 0 to 0.5 -->
-        </a-plane>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 1.6, 3.2);
 
-        <!-- Right Eye Image -->
-        <a-plane id="screen-right" visible="false" src="#stream" position="0 1.6 -2" width="3.2" height="1.8"
-            stereo="eye:right" shader="flat">
-            <!-- Adjust UVs for SBS Right: 0.5 to 1.0 -->
-        </a-plane>
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 1.6, 0);
+        controls.enableDamping = true;
+        controls.enablePan = false;
 
-        <!-- Environment -->
-        <a-sky color="#111"></a-sky>
-    </a-scene>
+        const ambient = new THREE.AmbientLight(0xffffff, 0.45);
+        const keyLight = new THREE.SpotLight(0x89c4ff, 1.1, 20, Math.PI / 4, 0.25, 1);
+        keyLight.position.set(-3, 4, 2);
+        const rimLight = new THREE.PointLight(0xffb347, 0.6, 10);
+        rimLight.position.set(3, 1.8, 1.5);
+        scene.add(ambient, keyLight, rimLight);
 
-    <script>
-        function updateStatusText(text) {
-            var el = document.getElementById('vr-status');
-            if (el) {
-                el.textContent = text;
+        const floor = new THREE.Mesh(
+            new THREE.CircleGeometry(40, 64),
+            new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.85, metalness: 0.05 })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.01;
+        scene.add(floor);
+
+        const frameCanvas = document.createElement('canvas');
+        frameCanvas.width = 1280;
+        frameCanvas.height = 720;
+        const frameCtx = frameCanvas.getContext('2d');
+        frameCtx.fillStyle = "#000";
+        frameCtx.fillRect(0, 0, frameCanvas.width, frameCanvas.height);
+
+        const frameTexture = new THREE.CanvasTexture(frameCanvas);
+        frameTexture.encoding = THREE.sRGBEncoding;
+        frameTexture.minFilter = THREE.LinearFilter;
+        frameTexture.magFilter = THREE.LinearFilter;
+        frameTexture.anisotropy = 4;
+
+        let screenMesh;
+        const screenState = {
+            width: 4.0,
+            height: 4.0 / (16 / 9),
+            distance: 3.2,
+            curvature: 0
+        };
+
+        function buildScreen() {
+            if (screenMesh) {
+                scene.remove(screenMesh);
             }
+
+            let geometry;
+            if (screenState.curvature < 0.05) {
+                geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, 32, 1);
+            } else {
+                const arc = THREE.MathUtils.lerp(Math.PI / 10, Math.PI / 1.8, screenState.curvature);
+                const radius = screenState.width / arc;
+                geometry = new THREE.CylinderGeometry(radius, radius, screenState.height, 72, 1, true, Math.PI / 2 - arc / 2, arc);
+                geometry.scale(-1, 1, 1);
+            }
+
+            const material = new THREE.MeshBasicMaterial({
+                map: frameTexture,
+                side: THREE.DoubleSide,
+                toneMapped: false
+            });
+            screenMesh = new THREE.Mesh(geometry, material);
+            screenMesh.position.set(0, 1.6, -screenState.distance);
+            scene.add(screenMesh);
         }
 
-        async function refreshServerStatus() {
-            try {
-                var response = await fetch('/health');
-                if (!response.ok) throw new Error('Request failed');
-                var payload = await response.json();
-                if (payload && payload.ip) {
-                    var bbox = payload.bbox || {};
-                    updateStatusText('PC IP ' + payload.ip + ' | Capture ' + (bbox.width || '?') + 'x' + (bbox.height || '?'));
-                } else {
-                    updateStatusText('Server running');
+        buildScreen();
+
+        function resizeRenderer() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            renderer.setSize(width, height);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+        }
+
+        window.addEventListener('resize', resizeRenderer);
+
+        function animate() {
+            renderer.setAnimationLoop(() => {
+                if (!renderer.xr.isPresenting) {
+                    controls.update();
                 }
+                renderer.render(scene, camera);
+            });
+        }
+
+        animate();
+
+        const state = {
+            streaming: true,
+            fps: 24,
+            quality: 80,
+            lightsOn: true,
+            previewVisible: true
+        };
+
+        const logEl = document.getElementById('log');
+        function log(message) {
+            const time = new Date().toLocaleTimeString();
+            logEl.textContent = `[${time}] ${message}\n` + logEl.textContent;
+        }
+
+        const serverStatusChip = document.getElementById('serverStatusChip');
+        const serverStatusLabel = document.getElementById('serverStatusLabel');
+        const vrModeLabel = document.getElementById('vrModeLabel');
+        const ipLabel = document.getElementById('ipLabel');
+        const questUrl = document.getElementById('questUrl');
+        const statusMessage = document.getElementById('vrStatusMessage');
+        const miniPreview = document.getElementById('mini-preview');
+
+        miniPreview.src = "/video_feed";
+
+        function setServerStatus(text, online) {
+            serverStatusLabel.textContent = text;
+            serverStatusChip.classList.remove('online', 'offline');
+            serverStatusChip.classList.add(online ? 'online' : 'offline');
+        }
+
+        function updateNetworkIndicator(bytes, elapsedMs) {
+            const bits = bytes * 8;
+            const kbps = bits / elapsedMs;
+            const mbps = (kbps / 1000).toFixed(2);
+            document.getElementById('networkSpeed').textContent = `${mbps} Mbps`;
+            document.getElementById('networkLatency').textContent = `Latency ${Math.round(elapsedMs)} ms`;
+        }
+
+        async function fetchFrameLoop() {
+            while (state.streaming) {
+                const start = performance.now();
+                try {
+                    const response = await fetch(`/frame.jpg?ts=${Date.now()}`, { cache: "no-store" });
+                    if (!response.ok) {
+                        throw new Error(response.statusText);
+                    }
+                    const blob = await response.blob();
+                    const bitmap = await createImageBitmap(blob);
+                    if (frameCanvas.width !== bitmap.width || frameCanvas.height !== bitmap.height) {
+                        frameCanvas.width = bitmap.width;
+                        frameCanvas.height = bitmap.height;
+                    }
+                    frameCtx.drawImage(bitmap, 0, 0, frameCanvas.width, frameCanvas.height);
+                    frameTexture.needsUpdate = true;
+                    statusMessage.textContent = "스트림 연결됨. VR 버튼을 눌러 감상하세요.";
+                    setServerStatus("Server online", true);
+                    updateNetworkIndicator(blob.size, performance.now() - start);
+                } catch (err) {
+                    statusMessage.textContent = `프레임 수신 실패: ${err.message}`;
+                    setServerStatus("Server offline", false);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
+                const elapsed = performance.now() - start;
+                const wait = Math.max(5, (1000 / state.fps) - elapsed);
+                await new Promise(r => setTimeout(r, wait));
+            }
+        }
+
+        fetchFrameLoop();
+
+        async function refreshHealth() {
+            try {
+                const res = await fetch('/health', { cache: 'no-store' });
+                const data = await res.json();
+                if (data.ip) {
+                    ipLabel.textContent = `IP: ${data.ip}`;
+                    questUrl.textContent = `http://${data.ip}:5000`;
+                }
+                if (data.bbox) {
+                    frameCanvas.width = data.bbox.width;
+                    frameCanvas.height = data.bbox.height;
+                }
+                setServerStatus("Server online", true);
+                statusMessage.textContent = "Quest에서 같은 주소로 접속하세요.";
             } catch (err) {
-                updateStatusText('Health check failed. Is the panel connected?');
-            }
-        }
-        refreshServerStatus();
-        setInterval(refreshServerStatus, 5000);
-
-        var isStereo = false;
-
-        function toggleStereo() {
-            isStereo = !isStereo;
-            var mono = document.querySelector('#screen-mono');
-            var left = document.querySelector('#screen-left');
-            var right = document.querySelector('#screen-right');
-
-            if (isStereo) {
-                mono.setAttribute('visible', false);
-                left.setAttribute('visible', true);
-                right.setAttribute('visible', true);
-
-                // Update UV mapping for SBS (Side-by-Side)
-                // A-Frame primitives don't easily expose UVs via attributes without a custom component or geometry manipulation.
-                // For a quick prototype, we might need a custom component or just assume the user can switch to a stereo mode in the video player if we were using a video tag.
-                // Since we are using an MJPEG stream (image), we need to map the texture coordinates.
-
-                updateUVs(left.object3DMap.mesh, 0, 0, 0.5, 1); // Left half
-                updateUVs(right.object3DMap.mesh, 0.5, 0, 1, 1); // Right half
-
-            } else {
-                mono.setAttribute('visible', true);
-                left.setAttribute('visible', false);
-                right.setAttribute('visible', false);
+                setServerStatus("Server offline", false);
+                statusMessage.textContent = "서버에 연결할 수 없습니다.";
+                log(`Health check failed: ${err.message}`);
             }
         }
 
-        function updateUVs(mesh, uMin, vMin, uMax, vMax) {
-            if (!mesh || !mesh.geometry) return;
-            var uvAttribute = mesh.geometry.attributes.uv;
+        refreshHealth();
+        setInterval(refreshHealth, 15000);
 
-            // Standard Plane Geometry UVs (usually 4 vertices for a simple plane)
-            // 0: (0,1), 1: (1,1), 2: (0,0), 3: (1,0) - Order depends on BufferGeometry construction
-            // Let's assume standard A-Frame plane (which is Three.js PlaneGeometry)
+        document.getElementById('fpsSlider').addEventListener('input', (e) => {
+            state.fps = parseInt(e.target.value, 10);
+            document.getElementById('fpsValue').textContent = `${state.fps} FPS`;
+            fetch('/update_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fps: state.fps })
+            }).catch(() => { });
+        });
 
-            // This is a bit hacky for a generic plane, but let's try standard mapping
-            // Top-Left, Top-Right, Bottom-Left, Bottom-Right
+        document.getElementById('qualitySlider').addEventListener('input', (e) => {
+            state.quality = parseInt(e.target.value, 10);
+            document.getElementById('qualityValue').textContent = `${state.quality}%`;
+            fetch('/update_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quality: state.quality })
+            }).catch(() => { });
+        });
 
-            const uvs = uvAttribute.array;
+        document.getElementById('distanceSlider').addEventListener('input', (e) => {
+            screenState.distance = parseFloat(e.target.value);
+            document.getElementById('distanceValue').textContent = `${screenState.distance.toFixed(1)}m`;
+            buildScreen();
+        });
 
-            // We need to iterate and check. Or just create a custom geometry.
-            // For now, let's just log that we need to implement UV mapping properly or use a component.
-            // Actually, let's use the 'multisrc' or just geometry.faceVertexUvs if it was old three.js, but this is BufferGeometry.
+        document.getElementById('curvatureSlider').addEventListener('input', (e) => {
+            screenState.curvature = parseInt(e.target.value, 10) / 100;
+            document.getElementById('curvatureValue').textContent = `${e.target.value}%`;
+            buildScreen();
+        });
 
-            // Simple hack: Just scale the texture repeat/offset if possible?
-            // A-Frame material has 'repeat' and 'offset' properties!
-            // material="src: #stream; repeat: 0.5 1; offset: 0 0" for Left
-            // material="src: #stream; repeat: 0.5 1; offset: 0.5 0" for Right
+        document.getElementById('toggleEnvBtn').addEventListener('click', () => {
+            state.lightsOn = !state.lightsOn;
+            keyLight.visible = state.lightsOn;
+            rimLight.visible = state.lightsOn;
+            log(`Lights ${state.lightsOn ? 'on' : 'off'}`);
+        });
 
-            // Let's use that instead of direct mesh manipulation!
-        }
+        document.getElementById('togglePreviewBtn').addEventListener('click', () => {
+            state.previewVisible = !state.previewVisible;
+            miniPreview.style.display = state.previewVisible ? 'block' : 'none';
+        });
 
-        // Re-implement toggle using material properties
-        function toggleStereo() {
-            isStereo = !isStereo;
-            var mono = document.querySelector('#screen-mono');
-            var left = document.querySelector('#screen-left');
-            var right = document.querySelector('#screen-right');
+        document.getElementById('refreshHealthBtn').addEventListener('click', refreshHealth);
 
-            if (isStereo) {
-                mono.setAttribute('visible', false);
-                left.setAttribute('visible', true);
-                right.setAttribute('visible', true);
+        document.getElementById('recenterBtn').addEventListener('click', () => {
+            camera.position.set(0, 1.6, screenState.distance);
+            controls.target.set(0, 1.6, 0);
+            controls.update();
+            log('Camera re-centered');
+        });
 
-                // Left Eye: Left half of image
-                left.setAttribute('material', 'repeat: 0.5 1; offset: 0 0');
+        document.getElementById('enterVrBtn').addEventListener('click', () => {
+            vrButton.click();
+        });
 
-                // Right Eye: Right half of image
-                right.setAttribute('material', 'repeat: 0.5 1; offset: 0.5 0');
+        renderer.xr.addEventListener('sessionstart', () => {
+            vrModeLabel.textContent = 'VR Session Active';
+        });
 
-            } else {
-                mono.setAttribute('visible', true);
-                left.setAttribute('visible', false);
-                right.setAttribute('visible', false);
-            }
-        }
+        renderer.xr.addEventListener('sessionend', () => {
+            vrModeLabel.textContent = 'Desktop Preview';
+        });
+
+        document.getElementById('ui-toggle-corner-btn').addEventListener('click', () => {
+            document.body.classList.toggle('overlay-hidden');
+        });
     </script>
 </body>
 

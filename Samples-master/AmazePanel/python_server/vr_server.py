@@ -176,23 +176,28 @@ def apply_config(data):
     return True, "updated" if updated else "no changes", clone_config()
 
 
+def encode_frame_bytes(sct, cfg):
+    bbox = build_bbox(cfg, sct.monitors)
+    if not bbox:
+        return None, None
+
+    img = sct.grab(bbox)
+    img_pil = Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
+    frame_buffer = io.BytesIO()
+    img_pil.save(frame_buffer, format="JPEG", quality=cfg.get("quality", 80))
+    return frame_buffer.getvalue(), bbox
+
+
 def capture_screen():
     """Generator that captures screen and yields JPEG frames."""
     with mss.mss() as sct:
         while True:
             cfg = clone_config()
-            bbox = build_bbox(cfg, sct.monitors)
-            if not bbox:
-                time.sleep(1)
-                continue
-
             try:
-                img = sct.grab(bbox)
-                img_pil = Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
-
-                frame_buffer = io.BytesIO()
-                img_pil.save(frame_buffer, format="JPEG", quality=cfg.get("quality", 80))
-                frame_bytes = frame_buffer.getvalue()
+                frame_bytes, _ = encode_frame_bytes(sct, cfg)
+                if frame_bytes is None:
+                    time.sleep(1)
+                    continue
 
                 yield (
                     b"--frame\r\n"
@@ -267,6 +272,23 @@ def health():
         "ip": local_ip(),
         "bbox": bbox,
     }
+
+
+@app.route("/frame.jpg")
+def frame_jpg():
+    """Returns a single JPEG frame for WebXR texture updates."""
+    with mss.mss() as sct:
+        cfg = clone_config()
+        frame_bytes, bbox = encode_frame_bytes(sct, cfg)
+    if not frame_bytes:
+        return Response(status=503)
+
+    response = Response(frame_bytes, mimetype="image/jpeg")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    if bbox:
+        response.headers["X-Capture-Width"] = str(bbox["width"])
+        response.headers["X-Capture-Height"] = str(bbox["height"])
+    return response
 
 
 @app.after_request

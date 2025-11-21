@@ -1605,8 +1605,7 @@
                 }
                 var extPath = csInterface.getSystemPath(SystemPath.EXTENSION);
                 var scriptPath = extPath.replace(/\//g, "\\\\") + "\\\\python_server\\\\start_server.bat";
-                var quotedPath = "\"" + scriptPath + "\"";
-                window.cep.process.createProcess("cmd.exe", "/c", "start", "\"VRServer\"", quotedPath);
+                window.cep.process.createProcess("cmd.exe", "/c", "start", "\"\"", "\"" + scriptPath + "\"");
             });
 
             // init flow display
