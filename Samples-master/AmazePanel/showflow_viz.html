@@ -1007,6 +1007,10 @@
                 // Avoid browser text selection when shift/ctrl clicking clips
                 e.preventDefault();
             }
+            if (e.altKey) {
+                setInOutFromClip(sIdx, trKey);
+                return;
+            }
             var key = clipKey(sIdx, trKey);
             var isToggle = e.ctrlKey || e.metaKey;
             var isAdd = e.shiftKey;
@@ -1026,6 +1030,34 @@
 
             lastSelectedKey = key;
             refreshSelectionStyles();
+        }
+
+        function setInOutFromClip(sIdx, trKey) {
+            if (!currentData || !currentData.slots || !currentData.slots[sIdx]) return;
+            var slot = currentData.slots[sIdx];
+            var clipData = slot.clips ? slot.clips[trKey] : null;
+            if (!clipData) return;
+
+            var clipName = (clipData && clipData.name) ? clipData.name : clipData;
+            var startFrame = slot.time || 0;
+            var nextSlot = currentData.slots[sIdx + 1];
+            var endFrame = nextSlot && typeof nextSlot.time === "number"
+                ? nextSlot.time - 1
+                : (startFrame + getSlotDuration(currentData, sIdx));
+
+            try {
+                var extensionRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+                var scriptPath = extensionRoot.replace(/\\/g, "/") + "/jsx/custom/13_SetInOutFromClip.jsx";
+                var payload = encodeURIComponent(JSON.stringify({
+                    startFrame: startFrame,
+                    endFrame: endFrame,
+                    clipName: clipName
+                }));
+                var evalStr = '$.evalFile("' + scriptPath + '"); $._ext.setInOutFromClip("' + payload + '");';
+                csInterface.evalScript(evalStr, function () { });
+            } catch (err) {
+                console.error("Failed to set In/Out: " + err);
+            }
         }
 
         function getFlowConfigPath() {

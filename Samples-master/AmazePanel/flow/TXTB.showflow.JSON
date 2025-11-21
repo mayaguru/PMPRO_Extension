@@ -11,7 +11,7 @@
   "slots": [
     {
       "time": 0,
-      "duration": 592,
+      "duration": 115,
       "clips": {
         "A": {
           "name": "TXTBClip100BranchA",
@@ -46,8 +46,8 @@
       }
     },
     {
-      "time": 592,
-      "duration": 614,
+      "time": 115,
+      "duration": 117,
       "clips": {
         "A": {
           "name": "TXTBClip120",
@@ -58,8 +58,8 @@
       }
     },
     {
-      "time": 1206,
-      "duration": 578,
+      "time": 232,
+      "duration": 109,
       "clips": {
         "A": {
           "name": "TXTBClip130branch2A",
@@ -94,8 +94,8 @@
       }
     },
     {
-      "time": 1784,
-      "duration": 400,
+      "time": 341,
+      "duration": 108,
       "clips": {
         "A": {
           "name": "TXTBClip140",
@@ -106,8 +106,8 @@
       }
     },
     {
-      "time": 2184,
-      "duration": 800,
+      "time": 449,
+      "duration": 165,
       "clips": {
         "A": {
           "name": "TXTBClip150",
@@ -118,8 +118,8 @@
       }
     },
     {
-      "time": 2984,
-      "duration": 600,
+      "time": 614,
+      "duration": 2970,
       "clips": {
         "A": {
           "name": "TXTBClip160",
@@ -188,6 +188,31 @@
           "out": 600
         }
       }
+    },
+    {
+      "time": 5384,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 5984,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 6584,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 7184,
+      "duration": 600,
+      "clips": {}
+    },
+    {
+      "time": 7784,
+      "duration": 600,
+      "clips": {}
     }
   ]
 }
