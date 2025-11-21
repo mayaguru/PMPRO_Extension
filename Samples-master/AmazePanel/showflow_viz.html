@@ -822,6 +822,7 @@
                 <div class="primary-controls">
                     <button onclick="toggleLayout()" id="btn-layout" class="large-btn">Timeline View</button>
                     <button onclick="toggleEditMode()" id="btn-edit-mode" class="large-btn">Edit Mode</button>
+                    <button onclick="selectAllClips()" class="large-btn">Select All</button>
                     <button id="render-selected-btn" onclick="renderSelectedClips()" class="large-btn" disabled>Render Selected</button>
                 </div>
                 <div class="secondary-controls">
@@ -1045,6 +1046,22 @@
                 return a.time - b.time;
             });
             return out;
+        }
+
+        function selectAllClips() {
+            if (!currentData || !currentData.slots) return;
+            var all = {};
+            currentData.slots.forEach(function (slot, sIdx) {
+                if (!slot || !slot.clips) return;
+                Object.keys(slot.clips).forEach(function (trKey) {
+                    if (slot.clips[trKey]) {
+                        all[clipKey(sIdx, trKey)] = true;
+                    }
+                });
+            });
+            selectedClips = all;
+            refreshSelectionStyles();
+            updateRenderSelectedButton();
         }
 
         function updateRenderSelectedButton() {
