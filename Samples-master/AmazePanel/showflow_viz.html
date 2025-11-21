@@ -995,7 +995,8 @@
                 } else if (typeof data.endFrame === "number" && data.endFrame > start) {
                     end = data.endFrame;
                 } else {
-                    end = start + 600;
+                    var slotHasClips = slot && slot.clips && Object.keys(slot.clips).length > 0;
+                    end = slotHasClips ? (start + 600) : start;
                 }
                 if (end > maxEnd) maxEnd = end;
             }
@@ -1397,8 +1398,8 @@
                 var remaining = data.endFrame - slot.time;
                 if (remaining > 0) return remaining;
             }
-            if (slot && typeof slot.duration === "number" && !isNaN(slot.duration) && slot.duration > 0) {
-                return slot.duration;
+            if (slot && typeof slot.duration === "number" && !isNaN(slot.duration)) {
+                return slot.duration < 0 ? 0 : slot.duration;
             }
             return 600;
         }
@@ -2031,6 +2032,10 @@
                     var newClip = { name: "NewClip", duration: newDur, in: 0, out: newDur };
                     if (!slot.clips) slot.clips = {};
                     slot.clips[trKey] = newClip;
+                    if (!slot.duration || slot.duration <= 0) {
+                        slot.duration = newDur;
+                        recalcSlotTimes(sIdx);
+                    }
                     render(currentData);
                 };
             }
@@ -2098,20 +2103,29 @@
         }
 
         function insertSlot(index) {
+            if (!currentData) return;
+            if (!currentData.slots) currentData.slots = [];
+            index = Math.max(0, Math.min(index, currentData.slots.length));
+
+            var slots = currentData.slots;
+            var insertTime = 0;
+
+            if (index > 0 && slots[index - 1]) {
+                var prev = slots[index - 1];
+                var prevDur = prev.duration || getSlotDuration(currentData, index - 1) || 0;
+                insertTime = (prev.time || 0) + prevDur;
+            } else if (slots[index] && typeof slots[index].time === "number") {
+                insertTime = slots[index].time;
+            }
+
             var newSlot = {
-                time: 0,
-                duration: 600,
+                time: insertTime,
+                duration: 0,
                 clips: {}
             };
 
-            currentData.slots.splice(index, 0, newSlot);
-
-            var runningTime = 0;
-            currentData.slots.forEach(function (s) {
-                s.time = runningTime;
-                runningTime += (s.duration || 0);
-            });
-
+            slots.splice(index, 0, newSlot);
+            recalcSlotTimes(index);
             render(currentData);
         }
 
