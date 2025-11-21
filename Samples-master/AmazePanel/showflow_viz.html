@@ -137,22 +137,6 @@
             }
         }
 
-        .backup-frequency {
-            font-size: 11px;
-            color: #aaa;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .backup-frequency select {
-            background: #2d2d2d;
-            border: 1px solid #555;
-            color: #ddd;
-            padding: 2px 6px;
-            border-radius: 4px;
-        }
-
         .large-btn {
             padding: 10px 18px;
             font-size: 12px;
@@ -949,14 +933,6 @@
                     <span id="current-filename">No file loaded</span>
                     <span id="last-backup"></span>
                 </div>
-                <label class="backup-frequency">Backup every:
-                    <select id="backup-interval-select" onchange="setBackupInterval(parseInt(this.value, 10))">
-                        <option value="1">1 min</option>
-                        <option value="5" selected>5 min</option>
-                        <option value="10">10 min</option>
-                        <option value="30">30 min</option>
-                    </select>
-                </label>
             </div>
             <div class="control-row">
                 <div class="primary-controls">
@@ -1179,6 +1155,13 @@
             });
         }
 
+        function announceBackupInterval() {
+            notifyParent({
+                type: "backup-interval-updated",
+                minutes: Number(backupIntervalMinutes) || 5
+            });
+        }
+
         window.addEventListener("message", function (event) {
             if (!event || !event.data) return;
             var data = event.data;
@@ -1188,6 +1171,12 @@
                 loadData();
             } else if (data.type === "request-flow-context") {
                 announceFlowContext();
+            } else if (data.type === "set-backup-interval") {
+                if (typeof data.minutes === "number") {
+                    setBackupInterval(data.minutes);
+                }
+            } else if (data.type === "request-backup-interval") {
+                announceBackupInterval();
             }
         });
 
@@ -1309,6 +1298,7 @@
                 select.value = String(clamped);
             }
             startAutoBackup();
+            announceBackupInterval();
         }
 
         function pushHistory(actionName, snapshotData) {
@@ -3437,10 +3427,7 @@
 
             updateFilenameDisplay();
             updateSaveStatus(true);
-            var intervalSelect = document.getElementById("backup-interval-select");
-            if (intervalSelect) {
-                intervalSelect.value = String(backupIntervalMinutes);
-            }
+            announceBackupInterval();
             updateUndoRedoButtons();
             loadData();
             startPlayheadPoll();

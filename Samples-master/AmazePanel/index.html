@@ -241,6 +241,30 @@
             margin: 6px 0;
         }
 
+        .backup-settings {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .backup-settings label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .backup-settings select {
+            background: #2d2d2d;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
         .backup-status {
             font-size: 11px;
             color: var(--muted);
@@ -592,6 +616,17 @@
                 requestManualBackup();
             });
 
+            $("#backup-interval-select").on("change", function (e) {
+                var minutes = parseInt($(this).val(), 10);
+                if (isNaN(minutes)) minutes = 5;
+                var frame = document.getElementById("showflowFrame");
+                if (frame && frame.contentWindow) {
+                    try {
+                        frame.contentWindow.postMessage({ type: "set-backup-interval", minutes: minutes }, "*");
+                    } catch (err) { }
+                }
+            });
+
             $("#backup-list-panel").on("click", ".restore-btn", function (e) {
                 e.preventDefault();
                 var path = $(this).data("path");
@@ -624,6 +659,7 @@
             var backupStatusEl = $("#backup-status");
             var backupFlowPath = "";
             var backupFolderPath = "";
+            var backupIntervalSelect = $("#backup-interval-select");
 
             function baseName(path) {
                 if (!path) return "";
@@ -730,6 +766,14 @@
             function setBackupStatus(text) {
                 if (!backupStatusEl || backupStatusEl.length === 0) return;
                 backupStatusEl.text(text || "");
+            }
+
+            function updateBackupIntervalUI(minutes) {
+                if (!backupIntervalSelect || backupIntervalSelect.length === 0) return;
+                var clamped = parseInt(minutes, 10);
+                if (isNaN(clamped)) clamped = 5;
+                clamped = Math.max(1, Math.min(60, clamped));
+                backupIntervalSelect.val(String(clamped));
             }
 
             function updateBackupMeta(flowPath, overrideFolder) {
@@ -977,6 +1021,7 @@
                 showflowFrame.addEventListener("load", function () {
                     try {
                         showflowFrame.contentWindow.postMessage({ type: "request-flow-context" }, "*");
+                        showflowFrame.contentWindow.postMessage({ type: "request-backup-interval" }, "*");
                     } catch (e) { }
                 });
             }
@@ -997,6 +1042,8 @@
                     if ($("#tab-backups").hasClass("active")) {
                         refreshBackupList();
                     }
+                } else if (data.type === "backup-interval-updated") {
+                    updateBackupIntervalUI(data.minutes);
                 }
             });
         });
@@ -1019,7 +1066,7 @@
             </span>
         </div>
         <div class="tab-bar">
-            <button class="tab-btn active" data-tab="showflow">Showflow Editor</button>
+            <button class="tab-btn active" data-tab="showflow">SHOWFLOW</button>
             <button class="tab-btn" data-tab="backups">Backups</button>
             <button class="tab-btn" data-tab="settings">Settings</button>
             <button class="tab-btn" data-tab="scripts">Scripts</button>
@@ -1047,6 +1094,16 @@
                     <button class="pill-btn" id="backup-refresh">Refresh List</button>
                     <button class="pill-btn" id="backup-open-folder">Open Folder</button>
                     <button class="pill-btn primary" id="backup-manual">Manual Backup (ask editor)</button>
+                </div>
+                <div class="backup-settings">
+                    <label for="backup-interval-select">Auto backup every</label>
+                    <select id="backup-interval-select">
+                        <option value="1">1 min</option>
+                        <option value="5" selected>5 min</option>
+                        <option value="10">10 min</option>
+                        <option value="30">30 min</option>
+                    </select>
+                    <span class="muted">Runs while Showflow editor is open.</span>
                 </div>
                 <div class="backup-status" id="backup-status">Waiting for editor…</div>
                 <div class="backup-list" id="backup-list-panel"></div>
