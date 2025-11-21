@@ -6,10 +6,7 @@
     "B": 1,
     "C": 2,
     "D": 3,
-    "E": 4,
-    "F": 5,
-    "G": 6,
-    "H": 7
+    "E": 4
   },
   "slots": [
     {
@@ -37,28 +34,34 @@
       "time": 1200,
       "clips": {
         "A": {
-          "name": "TXTBClip130branch2_A",
+          "name": "TXTBClip130branch2A",
           "duration": 600000,
           "in": 0,
           "out": 600000
         },
         "B": {
-          "name": "TXTBClip130branch2_B",
+          "name": "TXTBClip130branch2B",
           "duration": 600000,
           "in": 0,
           "out": 600000
         },
         "C": {
-          "name": "TXTBClip130branch2_C",
+          "name": "TXTBClip130branch2C",
           "duration": 600000,
           "in": 0,
           "out": 600000
         },
         "D": {
-          "name": "TXTBClip130branch2_D",
+          "name": "TXTBClip130branch2D",
           "duration": 600000,
           "in": 0,
           "out": 600000
+        },
+        "E": {
+          "name": "TXTBClip130branch2E",
+          "duration": 600,
+          "in": 0,
+          "out": 600
         }
       }
     },
@@ -110,31 +113,31 @@
       "time": 4200,
       "clips": {
         "A": {
-          "name": "TXTBClip180branch3_A",
+          "name": "TXTBClip180branch3A",
           "duration": 600000,
           "in": 0,
           "out": 600000
         },
         "B": {
-          "name": "TXTBClip180branch3_B",
+          "name": "TXTBClip180branch3B",
           "duration": 600000,
           "in": 0,
           "out": 600000
         },
         "C": {
-          "name": "TXTBClip180branch3_C",
+          "name": "TXTBClip180branch3C",
           "duration": 600000,
           "in": 0,
           "out": 600000
         },
         "D": {
-          "name": "TXTBClip180branch3_D",
+          "name": "TXTBClip180branch3D",
           "duration": 600000,
           "in": 0,
           "out": 600000
         },
         "E": {
-          "name": "TXTBClip180branch3_E",
+          "name": "TXTBClip180branch3E",
           "duration": 600000,
           "in": 0,
           "out": 600000

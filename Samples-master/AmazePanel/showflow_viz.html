@@ -101,6 +101,7 @@
             padding: 0;
             position: relative;
             background: #1a1a1a;
+            align-items: center; /* vertically center the timeline stack */
         }
 
         /* Vertical Layout (Tree View) */
@@ -118,17 +119,20 @@
             flex-direction: column-reverse;
             width: max-content;
             min-width: 100%;
-            padding: 0;
+            padding: 0 0 60px 0; /* modest space for ruler/markers */
+            margin-top: auto;
+            margin-bottom: auto;
             background: #1a1a1a;
         }
 
         /* Timeline Ruler */
         .timeline-ruler {
             position: sticky;
-            top: 0;
+            top: auto;
+            bottom: 22px; /* sit just above marker bar */
             z-index: 100;
             background: #2a2a2a;
-            border-bottom: 2px solid #444;
+            border-top: 2px solid #444;
             height: 40px;
             display: flex;
             margin-left: var(--track-label-width);
@@ -136,8 +140,9 @@
 
         .timeline-marker-bar {
             position: sticky;
-            top: 0;
-            height: 18px;
+            top: auto;
+            bottom: 0;
+            height: 90px;
             margin-left: var(--track-label-width);
             z-index: 110;
             pointer-events: auto;
@@ -147,21 +152,89 @@
             position: absolute;
             width: 0;
             height: 0;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-bottom: 8px solid #ffb347;
-            transform: translateX(-5px);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 10px solid #ffb347; /* point upward */
+            transform: translate(-6px, 0);
         }
 
         .marker-label {
             position: absolute;
-            top: 8px;
+            top: 18px; /* push text further below the triangle */
             transform: translateX(-50%);
-            font-size: 9px;
+            font-size: 12px;
             color: #ffb347;
             white-space: nowrap;
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
             pointer-events: none;
+            line-height: 1.25;
+        }
+
+        .marker-label .marker-time {
+            font-weight: bold;
+            display: block;
+        }
+
+        .marker-label .marker-name {
+            display: block;
+            margin-top: 2px;
+            font-size: 12px;
+        }
+
+        .marker-connector {
+            position: absolute;
+            width: 0;
+            border-left: 1px dashed #ffb347;
+            pointer-events: none;
+        }
+
+        /* Marker modal tweaks */
+        #marker-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1200;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .marker-row {
+            display: grid;
+            grid-template-columns: 110px 200px 1fr;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid #444;
+        }
+
+        .marker-row:last-child {
+            border-bottom: none;
+        }
+
+        .marker-row .tc {
+            font-size: 11px;
+            color: #ffb347;
+            white-space: nowrap;
+        }
+
+        .marker-row .current-name {
+            font-size: 11px;
+            color: #aaa;
+            word-break: break-all;
+        }
+
+        .marker-row input {
+            width: 100%;
+            padding: 6px;
+            background: #1e1e1e;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 3px;
+            box-sizing: border-box;
         }
 
         .ruler-marker {
@@ -220,6 +293,25 @@
             position: sticky;
             left: 0;
             z-index: 10;
+        }
+
+        .track-delete {
+            margin-left: 6px;
+            width: 16px;
+            height: 16px;
+            background: #d70000;
+            color: #fff;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 14px;
+            font-size: 10px;
+            cursor: pointer;
+            border: 1px solid #1a1a1a;
+            display: none;
+        }
+
+        .edit-mode .track-delete {
+            display: inline-block;
         }
 
         .track-content {
@@ -328,6 +420,30 @@
             display: block;
         }
 
+        .row-delete {
+            position: absolute;
+            right: -18px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: #d70000;
+            color: #fff;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 14px;
+            font-size: 10px;
+            cursor: pointer;
+            border: 1px solid #1a1a1a;
+            display: none;
+            z-index: 50;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .edit-mode .row-delete {
+            display: block;
+        }
+
         .delete-btn:hover {
             background: #ff0000;
             transform: scale(1.1);
@@ -379,6 +495,7 @@
             color: #888;
             text-align: right;
             position: relative;
+            overflow: visible;
         }
 
         .time-marker .dur {
@@ -545,10 +662,10 @@
 
     <div id="header">
         <h1>Showflow Visual Editor</h1>
-        <div id="controls">
+            <div id="controls">
             <div class="slider-control" id="zoom-control" style="display:none;">
                 <label title="Timeline Zoom">Zoom</label>
-                <input type="range" id="zoom-slider" min="0.5" max="3" step="0.1" value="1">
+                <input type="range" id="zoom-slider" min="0.2" max="1.5" step="0.1" value="1">
             </div>
             <div class="slider-control" id="height-control">
                 <label title="Track Height">H</label>
@@ -556,6 +673,8 @@
             </div>
             <button onclick="toggleLayout()" id="btn-layout">Timeline View</button>
             <button onclick="toggleEditMode()" id="btn-edit-mode">Edit Mode</button>
+            <button onclick="addTrack()">Add Track</button>
+            <button onclick="openMarkerList()">Edit Markers</button>
             <button onclick="window.location.href='index.html'">Back</button>
             <button onclick="loadData()">Reload</button>
             <button class="primary" onclick="saveData()">Save Changes</button>
@@ -583,6 +702,18 @@
             <div class="modal-actions">
                 <button onclick="closeModal()">Cancel</button>
                 <button class="primary" onclick="applyEdit()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Marker Edit Modal -->
+    <div id="marker-modal" style="display:none;">
+        <div class="modal-content" style="max-width:680px; width:680px;">
+            <h2>Edit Markers</h2>
+            <div id="marker-list" style="max-height:360px; overflow:auto; margin:-8px 0 12px 0; padding-right:4px;"></div>
+            <div class="modal-actions">
+                <button onclick="closeMarkerModal()">Cancel</button>
+                <button class="primary" onclick="applyMarkerEdits()">Apply</button>
             </div>
         </div>
     </div>
@@ -765,6 +896,13 @@
             return keys;
         }
 
+        function rebuildTrackMap(keys) {
+            var map = {};
+            keys.sort();
+            keys.forEach(function (k, idx) { map[k] = idx; });
+            return map;
+        }
+
         // Build marker positions (frames) from slot boundaries; markers are authoritative
         function collectMarkers(data) {
             var markers = [];
@@ -797,6 +935,44 @@
             } else {
                 renderVertical(data);
             }
+        }
+
+        function deleteTrack(trKey) {
+            if (!currentData) return;
+            var keys = deriveTrackKeys(currentData);
+            if (keys.length <= 1) {
+                alert("Cannot delete the last track.");
+                return;
+            }
+            if (!confirm("Delete Track " + trKey + "?\nAll clips on this track will be removed.")) return;
+
+            // Remove from track map
+            if (currentData.tracks) delete currentData.tracks[trKey];
+
+            // Remove clips on that track
+            if (currentData.slots) {
+                currentData.slots.forEach(function (slot) {
+                    if (slot && slot.clips && slot.clips[trKey]) {
+                        delete slot.clips[trKey];
+                    }
+                });
+            }
+
+            // Rebuild track map to keep indexes compact
+            var remaining = deriveTrackKeys(currentData).filter(function (k) { return k !== trKey; });
+            currentData.tracks = rebuildTrackMap(remaining);
+            render(currentData);
+        }
+
+        function addTrack() {
+            if (!currentData) return;
+            var keys = deriveTrackKeys(currentData);
+            var code = "A".charCodeAt(0);
+            while (keys.indexOf(String.fromCharCode(code)) >= 0) code++;
+            var newKey = String.fromCharCode(code);
+            keys.push(newKey);
+            currentData.tracks = rebuildTrackMap(keys);
+            render(currentData);
         }
 
         function renderHorizontal(data) {
@@ -833,6 +1009,7 @@
             markerBar.className = "timeline-marker-bar";
             markerBar.style.width = timelineWidth + "px";
             markerBar.style.marginLeft = labelWidth + "px";
+            var markerItems = [];
             markers.forEach(function (m, idx) {
                 var slotForName = data.slots && data.slots[Math.min(idx, data.slots.length - 1)];
                 var markerName = slotForName && slotForName.name ? slotForName.name : "";
@@ -849,17 +1026,45 @@
                 pin.title = framesToTimecode(m, fps) + (base ? (" - " + base) : "");
                 pin.style.borderBottomColor = branch ? "#ff7b7b" : "#ffb347";
                 pin.dataset.index = idx;
-                pin.ondblclick = function (e) {
-                    openMarkerEdit(idx);
+                pin.onclick = function (e) {
+                    openMarkerList();
                 };
-                markerBar.appendChild(pin);
 
                 var lbl = document.createElement("div");
                 lbl.className = "marker-label";
                 lbl.style.left = (m * pixelsPerFrame) + "px";
-                lbl.textContent = framesToTimecode(m, fps) + (base ? (" " + base) : "");
                 lbl.style.color = branch ? "#ff7b7b" : "#ffb347";
-                markerBar.appendChild(lbl);
+                lbl.innerHTML = "<span class='marker-time'>" + framesToTimecode(m, fps) + "</span>" +
+                    "<span class='marker-name'>" + (base || "") + "</span>";
+                markerItems.push({ x: m * pixelsPerFrame, pin: pin, lbl: lbl, color: branch ? "#ff7b7b" : "#ffb347" });
+            });
+
+            // Stagger vertically when markers are crowded
+            var minGapPx = 70;
+            var rowOffsets = [18, 40, 62]; // label top positions (bigger vertical offsets)
+            var lastX = -Infinity;
+            var lastRow = 0;
+            markerItems.forEach(function (item, i) {
+                var row = 0;
+                if (i > 0 && (item.x - lastX) < minGapPx) {
+                    row = (lastRow + 1) % rowOffsets.length;
+                }
+                lastX = item.x;
+                lastRow = row;
+                // Keep pin at base line, move label down; add connector if row > 0
+                item.pin.style.transform = "translate(-6px,0)";
+                item.lbl.style.top = rowOffsets[row] + "px";
+                if (row > 0) {
+                    var conn = document.createElement("div");
+                    conn.className = "marker-connector";
+                    conn.style.left = (item.x) + "px";
+                    conn.style.top = "10px";
+                    conn.style.height = (rowOffsets[row] - 10) + "px";
+                    conn.style.borderLeftColor = item.color;
+                    markerBar.appendChild(conn);
+                }
+                markerBar.appendChild(item.pin);
+                markerBar.appendChild(item.lbl);
             });
 
             // Create ruler
@@ -888,7 +1093,10 @@
                 ruler.appendChild(marker);
             }
 
-            // With column-reverse we append tracks first (bottom), then ruler, then marker bar (top)
+            // With column-reverse: append timeline elements first so they sit at bottom, then tracks above
+            root.appendChild(markerBar);
+            root.appendChild(ruler);
+
             sortedTracks.forEach(function (trKey) {
                 var trackRow = document.createElement("div");
                 trackRow.className = "track-row";
@@ -897,6 +1105,15 @@
                 trackLabel.className = "track-label";
                 trackLabel.textContent = "Track " + trKey;
                 trackLabel.style.width = labelWidth + "px";
+                var delBtn = document.createElement("div");
+                delBtn.className = "track-delete";
+                delBtn.textContent = "×";
+                delBtn.title = "Delete Track " + trKey;
+                delBtn.onclick = function (e) {
+                    e.stopPropagation();
+                    deleteTrack(trKey);
+                };
+                trackLabel.appendChild(delBtn);
                 trackLabels.push(trackLabel);
                 trackRow.appendChild(trackLabel);
 
@@ -922,9 +1139,6 @@
                 trackRow.appendChild(trackContent);
                 root.appendChild(trackRow);
             });
-
-            root.appendChild(ruler);
-            root.appendChild(markerBar);
 
             // Re-measure actual rendered label width (includes padding/border) to align ruler exactly
             if (trackLabels.length > 0) {
@@ -1014,6 +1228,15 @@
                 var th = document.createElement("div");
                 th.className = "track-header";
                 th.textContent = "Track " + tr;
+                var delBtn = document.createElement("div");
+                delBtn.className = "track-delete";
+                delBtn.textContent = "×";
+                delBtn.title = "Delete Track " + tr;
+                delBtn.onclick = function (e) {
+                    e.stopPropagation();
+                    deleteTrack(tr);
+                };
+                th.appendChild(delBtn);
                 root.appendChild(th);
             });
 
@@ -1036,6 +1259,16 @@
                         insertSlot(sIdx);
                     };
                     timeCell.appendChild(insertBtn);
+
+                    var deleteBtnRow = document.createElement("div");
+                    deleteBtnRow.className = "row-delete";
+                    deleteBtnRow.textContent = "×";
+                    deleteBtnRow.title = "Delete Row";
+                    deleteBtnRow.onclick = function (e) {
+                        e.stopPropagation();
+                        deleteSlot(sIdx);
+                    };
+                    timeCell.appendChild(deleteBtnRow);
                     root.appendChild(timeCell);
 
                     sortedTracks.forEach(function (trKey) {
@@ -1102,14 +1335,9 @@
                     deleteBtnHTML = "<div class='delete-btn' onclick='deleteClip(" + sIdx + ", \"" + trKey + "\", event)'>×</div>";
                 }
 
-                // Display base name and branch separately
-                var base = getBaseName(cName);
-                var branchLabel = "";
-                var branchMatch = cName.match(/(branch\\d+_?[A-Z]?)/i);
-                if (branchMatch) branchLabel = " (" + branchMatch[1] + ")";
-
+                // Show full clip name (keep branch suffix) in Tree view
                 card.innerHTML = deleteBtnHTML +
-                    "<div class='clip-name'>" + (base || cName) + branchLabel + "</div>" +
+                    "<div class='clip-name'>" + cName + "</div>" +
                     "<div class='clip-meta'>" + cDur + "f</div>";
 
                 card.ondblclick = function () {
@@ -1198,6 +1426,19 @@
             render(currentData);
         }
 
+        function deleteSlot(index) {
+            if (!currentData || !currentData.slots) return;
+            if (index < 0 || index >= currentData.slots.length) return;
+            if (!confirm("Delete this row/slot?")) return;
+            currentData.slots.splice(index, 1);
+            var runningTime = 0;
+            currentData.slots.forEach(function (s) {
+                s.time = runningTime;
+                runningTime += (s.duration || 0);
+            });
+            render(currentData);
+        }
+
         function moveClip(srcIdx, srcTrKey, destIdx, destTrKey) {
             if (srcIdx === destIdx && srcTrKey === destTrKey) return;
 
@@ -1223,18 +1464,51 @@
             render(currentData);
         }
 
-        function openMarkerEdit(idx) {
+        function openMarkerList() {
             if (!currentData || !currentData.slots || currentData.slots.length === 0) return;
-            var slotIdx = Math.min(idx, currentData.slots.length - 1);
-            var slot = currentData.slots[slotIdx];
+            var fps = currentData.fps || 60;
             var markers = collectMarkers(currentData);
-            var tc = framesToTimecode(markers[idx] || 0, currentData.fps || 60);
-            var currentName = slot && slot.name ? slot.name : "";
-            var newName = prompt("Edit marker name\nMarker #" + (idx + 1) + " @ " + tc, currentName);
-            if (newName !== null) {
-                slot.name = newName;
-                render(currentData);
-            }
+            var list = document.getElementById("marker-list");
+            list.innerHTML = "";
+            markers.forEach(function (m, idx) {
+                var slotIdx = Math.min(idx, currentData.slots.length - 1);
+                var slot = currentData.slots[slotIdx];
+                var name = "";
+                if (slot) {
+                    if (slot.name) {
+                        name = slot.name;
+                    } else if (slot.clips) {
+                        var firstKey = Object.keys(slot.clips)[0];
+                        var clipVal = slot.clips[firstKey];
+                        if (clipVal && typeof clipVal === "object" && clipVal.name) name = clipVal.name;
+                        else if (typeof clipVal === "string") name = clipVal;
+                    }
+                }
+                var row = document.createElement("div");
+                row.className = "marker-row";
+                row.innerHTML = "<div class='tc'>" + framesToTimecode(m, fps) + "</div>" +
+                    "<div class='current-name'>" + (name || "(empty)") + "</div>" +
+                    "<input type='text' data-slot='" + slotIdx + "' value=\"" + (name || "") + "\">";
+                list.appendChild(row);
+            });
+            document.getElementById("marker-modal").style.display = "flex";
+        }
+
+        function closeMarkerModal() {
+            document.getElementById("marker-modal").style.display = "none";
+        }
+
+        function applyMarkerEdits() {
+            if (!currentData || !currentData.slots) return;
+            var inputs = document.querySelectorAll("#marker-list input");
+            inputs.forEach(function (inp) {
+                var idx = parseInt(inp.dataset.slot, 10);
+                if (!isNaN(idx) && currentData.slots[idx]) {
+                    currentData.slots[idx].name = inp.value;
+                }
+            });
+            closeMarkerModal();
+            render(currentData);
         }
 
         $(document).ready(function () {
