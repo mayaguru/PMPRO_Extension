@@ -2367,7 +2367,6 @@
 
         function deleteClip(sIdx, trKey, e) {
             e.stopPropagation();
-            if (!confirm("Delete this clip?")) return;
 
             var slot = currentData.slots[sIdx];
             if (slot && slot.clips && slot.clips[trKey]) {
@@ -2408,7 +2407,6 @@
         function deleteSlot(index) {
             if (!currentData || !currentData.slots) return;
             if (index < 0 || index >= currentData.slots.length) return;
-            if (!confirm("Delete this row/slot?")) return;
             pushHistory("Delete Slot");
             currentData.slots.splice(index, 1);
             var runningTime = 0;
@@ -2443,10 +2441,6 @@
             var nextSlot = currentData.slots[slotIdx + 1];
             if (!currentSlot || !nextSlot) {
                 alert("Invalid marker position.");
-                return;
-            }
-
-            if (!confirm("Delete this marker?\n\nSlots will be merged:\n- Slot " + slotIdx + " + Slot " + (slotIdx + 1) + "\n\nConflicting clips will use the second slot's version.")) {
                 return;
             }
 
