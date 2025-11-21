@@ -848,6 +848,8 @@
                 <div class="primary-controls">
                     <button onclick="toggleLayout()" id="btn-layout" class="large-btn">Timeline View</button>
                     <button onclick="toggleEditMode()" id="btn-edit-mode" class="large-btn">Edit Mode</button>
+                    <button onclick="undo()" id="btn-undo" class="large-btn" disabled>⟲ Undo</button>
+                    <button onclick="redo()" id="btn-redo" class="large-btn" disabled>⟳ Redo</button>
                     <button onclick="selectAllClips()" class="large-btn">Select All</button>
                     <button id="render-selected-btn" onclick="renderSelectedClips()" class="large-btn" disabled>Render Selected</button>
                 </div>
@@ -964,9 +966,96 @@
         var playheadLocalStamp = 0;
         var selectedClips = {};
         var lastSelectedKey = null;
+        var undoStack = [];
+        var redoStack = [];
+        var maxHistorySize = 50;
+        var historyEnabled = true;
 
         function clipKey(sIdx, trKey) {
             return sIdx + "__" + trKey;
+        }
+
+        function pushHistory(actionName, snapshotData) {
+            if (!historyEnabled || !currentData) return;
+            var source = snapshotData ? snapshotData : JSON.parse(JSON.stringify(currentData));
+            var snapshot = {
+                data: source,
+                action: actionName || "Unknown Action",
+                timestamp: Date.now()
+            };
+
+            undoStack.push(snapshot);
+            if (undoStack.length > maxHistorySize) {
+                undoStack.shift();
+            }
+
+            redoStack = [];
+            updateUndoRedoButtons();
+        }
+
+        function undo() {
+            if (undoStack.length === 0) {
+                console.log("Nothing to undo");
+                return;
+            }
+
+            historyEnabled = false;
+            var currentSnapshot = {
+                data: JSON.parse(JSON.stringify(currentData)),
+                action: "Before Undo",
+                timestamp: Date.now()
+            };
+            redoStack.push(currentSnapshot);
+
+            var previous = undoStack.pop();
+            currentData = JSON.parse(JSON.stringify(previous.data));
+            render(currentData);
+            historyEnabled = true;
+            updateUndoRedoButtons();
+            console.log("Undo: " + previous.action);
+        }
+
+        function redo() {
+            if (redoStack.length === 0) {
+                console.log("Nothing to redo");
+                return;
+            }
+
+            historyEnabled = false;
+            var currentSnapshot = {
+                data: JSON.parse(JSON.stringify(currentData)),
+                action: "Before Redo",
+                timestamp: Date.now()
+            };
+            undoStack.push(currentSnapshot);
+
+            var next = redoStack.pop();
+            currentData = JSON.parse(JSON.stringify(next.data));
+            render(currentData);
+            historyEnabled = true;
+            updateUndoRedoButtons();
+            console.log("Redo: " + next.action);
+        }
+
+        function updateUndoRedoButtons() {
+            var undoBtn = document.getElementById("btn-undo");
+            var redoBtn = document.getElementById("btn-redo");
+
+            if (undoBtn) {
+                undoBtn.disabled = undoStack.length === 0;
+                undoBtn.title = undoStack.length > 0 ? ("Undo: " + undoStack[undoStack.length - 1].action) : "Nothing to undo";
+            }
+
+            if (redoBtn) {
+                redoBtn.disabled = redoStack.length === 0;
+                redoBtn.title = redoStack.length > 0 ? ("Redo: " + redoStack[redoStack.length - 1].action) : "Nothing to redo";
+            }
+        }
+
+        function clearHistory() {
+            undoStack = [];
+            redoStack = [];
+            updateUndoRedoButtons();
         }
 
         function getSlotStartFrame(data, sIdx) {
@@ -1262,7 +1351,9 @@
                 var singleIdx = parseInt(singleParts[0], 10);
                 var singleTrack = singleParts[1];
                 if (isNaN(singleIdx) || !singleTrack) return false;
+                var singleSnapshot = JSON.parse(JSON.stringify(currentData));
                 if (setClipNameFromText(singleIdx, singleTrack, trimmedRaw)) {
+                    pushHistory("Paste Clip Names", singleSnapshot);
                     render(currentData);
                     return true;
                 }
@@ -1274,6 +1365,7 @@
             }).filter(function (seg) { return seg.length > 0; });
             if (!segments.length) return false;
 
+            var multiSnapshot = JSON.parse(JSON.stringify(currentData));
             var applied = 0;
             for (var i = 0; i < keys.length && applied < segments.length; i++) {
                 var parts = keys[i].split("__");
@@ -1286,6 +1378,7 @@
             }
 
             if (applied > 0) {
+                pushHistory("Paste Clip Names", multiSnapshot);
                 render(currentData);
                 return true;
             }
@@ -1419,6 +1512,7 @@
 
             try {
                 currentData = JSON.parse(flowRes.data);
+                clearHistory();
                 render(currentData);
             } catch (e) {
                 alert("Error parsing JSON: " + e);
@@ -2245,6 +2339,11 @@
             if (isNaN(newDur) || newDur <= 0) newDur = 1;
 
             var slot = currentData.slots[sIdx];
+            if (!slot) {
+                closeModal();
+                return;
+            }
+            pushHistory("Edit Clip: " + (newName || trKey));
             if (slot && slot.clips && slot.clips[trKey]) {
                 var c = slot.clips[trKey];
                 if (typeof c === "string") {
@@ -2271,7 +2370,8 @@
             if (!confirm("Delete this clip?")) return;
 
             var slot = currentData.slots[sIdx];
-            if (slot && slot.clips) {
+            if (slot && slot.clips && slot.clips[trKey]) {
+                pushHistory("Delete Clip");
                 delete slot.clips[trKey];
                 render(currentData);
             }
@@ -2299,6 +2399,7 @@
                 clips: {}
             };
 
+            pushHistory("Insert Slot");
             slots.splice(index, 0, newSlot);
             recalcSlotTimes(index);
             render(currentData);
@@ -2308,6 +2409,7 @@
             if (!currentData || !currentData.slots) return;
             if (index < 0 || index >= currentData.slots.length) return;
             if (!confirm("Delete this row/slot?")) return;
+            pushHistory("Delete Slot");
             currentData.slots.splice(index, 1);
             var runningTime = 0;
             currentData.slots.forEach(function (s) {
@@ -2348,6 +2450,7 @@
                 return;
             }
 
+            pushHistory("Delete Marker");
             var currentDur = getSlotDuration(currentData, slotIdx) || 0;
             var nextDur = getSlotDuration(currentData, slotIdx + 1) || 0;
             var mergedDur = currentDur + nextDur;
@@ -2387,6 +2490,7 @@
 
             var destClip = destSlot.clips[destTrKey];
 
+            pushHistory("Move Clip");
             destSlot.clips[destTrKey] = clipToMove;
 
             if (destClip) {
@@ -2442,7 +2546,9 @@
                 idx: idx,
                 pxPerFrame: pxPerFrame,
                 origX: e.clientX,
-                origMarkers: markers.slice()
+                origMarkers: markers.slice(),
+                hasChanges: false,
+                historySnapshot: JSON.parse(JSON.stringify(currentData))
             };
             document.addEventListener("mousemove", onMarkerDragMove);
             document.addEventListener("mouseup", endMarkerDrag);
@@ -2460,6 +2566,7 @@
             candidate = Math.max(prev, Math.min(next, candidate));
             if (candidate === newMarkers[markerDrag.idx]) return;
             newMarkers[markerDrag.idx] = candidate;
+            markerDrag.hasChanges = true;
             updateSlotsFromMarkers(newMarkers, currentData);
             setPlayheadFrame(candidate, true);
             render(currentData);
@@ -2468,6 +2575,9 @@
         function endMarkerDrag() {
             document.removeEventListener("mousemove", onMarkerDragMove);
             document.removeEventListener("mouseup", endMarkerDrag);
+            if (markerDrag && markerDrag.hasChanges) {
+                pushHistory("Move Marker", markerDrag.historySnapshot);
+            }
             markerDrag = null;
         }
 
@@ -2806,6 +2916,7 @@
                 document.documentElement.style.setProperty('--card-height', height + 'px');
             });
 
+            updateUndoRedoButtons();
             loadData();
             startPlayheadPoll();
 
@@ -2813,6 +2924,16 @@
             document.addEventListener("keydown", function (e) {
                 if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
                 var key = e.key.toLowerCase();
+                if (e.ctrlKey && key === "z" && !e.shiftKey) {
+                    e.preventDefault();
+                    undo();
+                    return;
+                }
+                if (e.ctrlKey && (key === "y" || (key === "z" && e.shiftKey))) {
+                    e.preventDefault();
+                    redo();
+                    return;
+                }
                 if (key === "a") {
                     setPlayheadFrame(playheadFrame - 1, true);
                 } else if (key === "d") {
