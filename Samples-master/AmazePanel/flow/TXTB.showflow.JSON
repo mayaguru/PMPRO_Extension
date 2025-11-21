@@ -26,7 +26,7 @@
       }
     },
     {
-      "time": 293,
+      "time": 1116,
       "clips": {
         "A": "TXTBClip130branch2A",
         "B": "TXTBClip130branch2B",
@@ -36,31 +36,31 @@
       }
     },
     {
-      "time": 560,
+      "time": 1264,
       "clips": {
         "A": "TXTBClip140"
       }
     },
     {
-      "time": 863,
+      "time": 2082,
       "clips": {
         "A": "TXTBClip150"
       }
     },
     {
-      "time": 1133,
+      "time": 2264,
       "clips": {
         "A": "TXTBClip160"
       }
     },
     {
-      "time": 3584,
+      "time": 2576,
       "clips": {
         "A": "TXTBClip170"
       }
     },
     {
-      "time": 4184,
+      "time": 3596,
       "clips": {
         "A": "TXTBClip180branch3A",
         "B": "TXTBClip180branch3B",
@@ -70,15 +70,11 @@
       }
     },
     {
-      "time": 4784,
+      "time": 3683,
       "clips": {
         "A": "TXTBClip190"
       }
-    },
-    {
-      "time": 5384,
-      "clips": {}
     }
   ],
-  "endFrame": 5984
+  "endFrame": 7000
 }

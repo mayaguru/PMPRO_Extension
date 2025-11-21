@@ -89,6 +89,92 @@ $._ext.renderSelectedClips = function (payloadStr) {
             return name.toString().replace(/[^A-Za-z0-9_-]+/g, '_');
         }
 
+        function branchSuffix(name) {
+            if (!name) return null;
+            var str = "";
+            if (typeof name === "string") {
+                str = name;
+            } else if (name && typeof name === "object" && name.name) {
+                str = name.name;
+            } else if (name && name.toString) {
+                try { str = name.toString(); } catch (e) { str = ""; }
+            }
+            if (typeof str !== "string") str = String(str || "");
+            if (typeof str.trim === "function") {
+                str = str.trim();
+            } else {
+                str = (String.prototype.trim ? String.prototype.trim.call(str) : String(str));
+            }
+            var dot = str.lastIndexOf(".");
+            if (dot > 0) {
+                str = str.substring(0, dot);
+            }
+            var m = /([A-Z])$/.exec(str);
+            var suffix = m ? m[1] : null;
+            $.writeln("DEBUG branchSuffix name=" + str + " suffix=" + suffix);
+            return suffix;
+        }
+
+        function frameToTicks(frame, fps) {
+            return Math.round((frame / fps) * TICKS_PER_SECOND);
+        }
+
+        function isolateBranch(seq, fps, startFrame, endFrame, suffix) {
+            var toggled = [];
+            if (!suffix) return toggled;
+            var startTicks = frameToTicks(startFrame, fps);
+            var endTicks = frameToTicks(endFrame, fps);
+            var numTracks = (seq.videoTracks && seq.videoTracks.numTracks) ? seq.videoTracks.numTracks : 0;
+            for (var vt = 0; vt < numTracks; vt++) {
+                var track = seq.videoTracks[vt];
+                if (!track || !track.clips) continue;
+                var numClips = track.clips.numItems || 0;
+                for (var ci = 0; ci < numClips; ci++) {
+                    var clip = track.clips[ci];
+                    if (!clip) continue;
+                    var clipStart = (clip.start && clip.start.ticks !== undefined) ? Number(clip.start.ticks) : 0;
+                    var clipEnd = (clip.end && clip.end.ticks !== undefined) ? Number(clip.end.ticks) : clipStart;
+                    if (clipEnd <= startTicks || clipStart >= endTicks) continue;
+                    var name = clip.name || (clip.projectItem && clip.projectItem.name) || "";
+                    var clipSuffix = branchSuffix(name);
+                    if (!clipSuffix) continue;
+                    var shouldEnable = (clipSuffix === suffix);
+                    try {
+                        var prev = (typeof clip.isVideoEnabled === "function") ? clip.isVideoEnabled() : (clip.disabled === true ? false : true);
+                        if (typeof clip.setVideoEnabled === "function") {
+                            clip.setVideoEnabled(shouldEnable);
+                        } else {
+                            clip.disabled = !shouldEnable;
+                        }
+                        $.writeln("DEBUG clip '" + name + "' suffix=" + clipSuffix + " -> enabled=" + shouldEnable);
+                        toggled.push({ clip: clip, wasEnabled: prev });
+                    } catch (eSet) {
+                        $.writeln("DEBUG failed to toggle clip '" + name + "': " + eSet);
+                    }
+                }
+            }
+            return toggled;
+        }
+
+        function restoreBranchState(toggled) {
+            if (!toggled) return;
+            for (var i = 0; i < toggled.length; i++) {
+                var entry = toggled[i];
+                var clip = entry.clip;
+                if (!clip) continue;
+                try {
+                    if (typeof clip.setVideoEnabled === "function") {
+                        clip.setVideoEnabled(entry.wasEnabled);
+                    } else {
+                        clip.disabled = !entry.wasEnabled;
+                    }
+                    $.writeln("DEBUG restored clip to enabled=" + entry.wasEnabled);
+                } catch (e) {
+                    $.writeln("DEBUG failed to restore clip: " + e);
+                }
+            }
+        }
+
         var fps = getFPS(seq);
         var TICKS_PER_SECOND = 254016000000;
         var jobs = 0;
@@ -114,56 +200,63 @@ $._ext.renderSelectedClips = function (payloadStr) {
                 continue;
             }
 
-            // Convert frames to seconds
-            var inSec = startFrame / fps;
-            var outSec = endFrame / fps;
+            var suffix = branchSuffix(clip.name || clipName);
+            var toggled = isolateBranch(seq, fps, startFrame, endFrame, suffix);
 
-            // Set In/Out points
             try {
-                seq.setInPoint(inSec);
-                seq.setOutPoint(outSec);
-            } catch (e) {
-                // Fallback to ticks if seconds don't work
-                var inTicks = Math.round(inSec * TICKS_PER_SECOND);
-                var outTicks = Math.round(outSec * TICKS_PER_SECOND);
+                // Convert frames to seconds
+                var inSec = startFrame / fps;
+                var outSec = endFrame / fps;
+
+                // Set In/Out points
                 try {
-                    seq.setInPoint(inTicks.toString());
-                    seq.setOutPoint(outTicks.toString());
-                } catch (e2) {
-                    errors.push("Failed to set In/Out for " + clipName + ": " + e2);
-                    continue;
+                    seq.setInPoint(inSec);
+                    seq.setOutPoint(outSec);
+                } catch (e) {
+                    // Fallback to ticks if seconds don't work
+                    var inTicks = Math.round(inSec * TICKS_PER_SECOND);
+                    var outTicks = Math.round(outSec * TICKS_PER_SECOND);
+                    try {
+                        seq.setInPoint(inTicks.toString());
+                        seq.setOutPoint(outTicks.toString());
+                    } catch (e2) {
+                        errors.push("Failed to set In/Out for " + clipName + ": " + e2);
+                        continue;
+                    }
                 }
-            }
 
-            // Build output path
-            var seqName = seq.name || "sequence";
-            var fileName = seqName + "_" + clipName + ext;
-            var outPath = outDir.fsName + "/" + fileName;
+                // Build output path
+                var seqName = seq.name || "sequence";
+                var fileName = seqName + "_" + clipName + ext;
+                var outPath = outDir.fsName + "/" + fileName;
 
-            // Normalize path for Windows
-            if ($.os.indexOf("Windows") !== -1) {
-                outPath = outPath.replace(/\//g, "\\");
-            }
+                // Normalize path for Windows
+                if ($.os.indexOf("Windows") !== -1) {
+                    outPath = outPath.replace(/\//g, "\\");
+                }
 
-            // Queue to AME
-            var rangeToEncode = (app.encoder.ENCODE_IN_TO_OUT !== undefined)
-                ? app.encoder.ENCODE_IN_TO_OUT
-                : 1;
-            var removeFromQueue = 1;
+                // Queue to AME
+                var rangeToEncode = (app.encoder.ENCODE_IN_TO_OUT !== undefined)
+                    ? app.encoder.ENCODE_IN_TO_OUT
+                    : 1;
+                var removeFromQueue = 1;
 
-            var jobID = app.encoder.encodeSequence(
-                seq,
-                outPath,
-                presetFile.fsName,
-                rangeToEncode,
-                removeFromQueue
-            );
+                var jobID = app.encoder.encodeSequence(
+                    seq,
+                    outPath,
+                    presetFile.fsName,
+                    rangeToEncode,
+                    removeFromQueue
+                );
 
-            if (jobID) {
-                $.writeln("Queued: " + fileName + " (frames " + startFrame + "-" + endFrame + ")");
-                jobs++;
-            } else {
-                errors.push("Failed to queue: " + clipName);
+                if (jobID) {
+                    $.writeln("Queued: " + fileName + " (frames " + startFrame + "-" + endFrame + ")");
+                    jobs++;
+                } else {
+                    errors.push("Failed to queue: " + clipName);
+                }
+            } finally {
+                restoreBranchState(toggled);
             }
         }
 
