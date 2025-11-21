@@ -76,10 +76,12 @@ $._ext.renderSelectedClips = function (payloadStr) {
         // Process each clip
         for (var i = 0; i < clips.length; i++) {
             var clip = clips[i];
+            $.writeln("DEBUG Clip " + i + ": " + JSON.stringify(clip));
             var startFrame = Number(clip.time) || 0;
             var duration = Number(clip.duration) || 0;
             var endFrame = startFrame + duration;
             var clipName = sanitizeName(clip.name || ("clip_" + (i + 1)));
+            $.writeln("DEBUG Calc: startFrame=" + startFrame + ", duration=" + duration + ", endFrame=" + endFrame);
 
             if (duration <= 0) {
                 errors.push("Skipped " + clipName + " (invalid duration)");

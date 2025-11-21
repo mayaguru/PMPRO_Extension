@@ -11,207 +11,72 @@
   "slots": [
     {
       "time": 0,
-      "duration": 115,
       "clips": {
-        "A": {
-          "name": "TXTBClip100BranchA",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "B": {
-          "name": "TXTBClip100BranchB",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "C": {
-          "name": "TXTBClip100BranchC",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "D": {
-          "name": "TXTBClip100BranchD",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "E": {
-          "name": "TXTBClip100BranchE",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip100BranchA",
+        "B": "TXTBClip100BranchB",
+        "C": "TXTBClip100BranchC",
+        "D": "TXTBClip100BranchD",
+        "E": "TXTBClip100BranchE"
       }
     },
     {
       "time": 115,
-      "duration": 117,
       "clips": {
-        "A": {
-          "name": "TXTBClip120",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip120"
       }
     },
     {
-      "time": 232,
-      "duration": 109,
+      "time": 293,
       "clips": {
-        "A": {
-          "name": "TXTBClip130branch2A",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "B": {
-          "name": "TXTBClip130branch2B",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "C": {
-          "name": "TXTBClip130branch2C",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "D": {
-          "name": "TXTBClip130branch2D",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "E": {
-          "name": "TXTBClip130branch2E",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip130branch2A",
+        "B": "TXTBClip130branch2B",
+        "C": "TXTBClip130branch2C",
+        "D": "TXTBClip130branch2D",
+        "E": "TXTBClip130branch2E"
       }
     },
     {
-      "time": 341,
-      "duration": 108,
+      "time": 560,
       "clips": {
-        "A": {
-          "name": "TXTBClip140",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip140"
       }
     },
     {
-      "time": 449,
-      "duration": 165,
+      "time": 863,
       "clips": {
-        "A": {
-          "name": "TXTBClip150",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip150"
       }
     },
     {
-      "time": 614,
-      "duration": 2970,
+      "time": 1133,
       "clips": {
-        "A": {
-          "name": "TXTBClip160",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip160"
       }
     },
     {
       "time": 3584,
-      "duration": 600,
       "clips": {
-        "A": {
-          "name": "TXTBClip170",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip170"
       }
     },
     {
       "time": 4184,
-      "duration": 600,
       "clips": {
-        "A": {
-          "name": "TXTBClip180branch3A",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "B": {
-          "name": "TXTBClip180branch3B",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "C": {
-          "name": "TXTBClip180branch3C",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "D": {
-          "name": "TXTBClip180branch3D",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        },
-        "E": {
-          "name": "TXTBClip180branch3E",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip180branch3A",
+        "B": "TXTBClip180branch3B",
+        "C": "TXTBClip180branch3C",
+        "D": "TXTBClip180branch3D",
+        "E": "TXTBClip180branch3E"
       }
     },
     {
       "time": 4784,
-      "duration": 600,
       "clips": {
-        "A": {
-          "name": "TXTBClip190",
-          "duration": 600,
-          "in": 0,
-          "out": 600
-        }
+        "A": "TXTBClip190"
       }
     },
     {
       "time": 5384,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 5984,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 6584,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 7184,
-      "duration": 600,
-      "clips": {}
-    },
-    {
-      "time": 7784,
-      "duration": 600,
       "clips": {}
     }
   ]

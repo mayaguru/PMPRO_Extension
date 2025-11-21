@@ -898,6 +898,59 @@
         }
 
         function getSlotEndFrame(data, sIdx) {
+            var start = getSlotStartFrame(data, sIdx);
+            if (sIdx < data.slots.length - 1) {
+                var nextStart = getSlotStartFrame(data, sIdx + 1);
+                if (nextStart > start) return nextStart;
+            }
+            if (data && typeof data.endFrame === "number" && data.endFrame > start) {
+                return data.endFrame;
+            }
+            var slot = data.slots[sIdx];
+            if (slot && typeof slot.duration === "number" && slot.duration > 0) {
+                return start + slot.duration;
+            }
+            return start + 600;
+        }
+
+        function computeEndFrame(data) {
+            if (!data || !data.slots || data.slots.length === 0) {
+                data.endFrame = 0;
+                return 0;
+            }
+            var maxEnd = 0;
+            for (var i = 0; i < data.slots.length; i++) {
+                var start = getSlotStartFrame(data, i);
+                var end = start;
+                var slot = data.slots[i];
+                if (slot && typeof slot.duration === "number" && slot.duration > 0) {
+                    end = start + Number(slot.duration);
+                } else if (i < data.slots.length - 1) {
+                    var nextStart = getSlotStartFrame(data, i + 1);
+                    if (nextStart > start) end = nextStart;
+                } else if (typeof data.endFrame === "number" && data.endFrame > start) {
+                    end = data.endFrame;
+                } else {
+                    end = start + 600;
+                }
+                if (end > maxEnd) maxEnd = end;
+            }
+            data.endFrame = maxEnd;
+            return maxEnd;
+        }
+
+        function getSlotStartFrame(data, sIdx) {
+            if (!data || !data.slots || sIdx < 0 || sIdx >= data.slots.length) return 0;
+            var slot = data.slots[sIdx];
+            if (slot && typeof slot.time === "number") return slot.time;
+            var total = 0;
+            for (var i = 0; i < sIdx; i++) {
+                total += getSlotDuration(data, i);
+            }
+            return total;
+        }
+
+        function getSlotEndFrame(data, sIdx) {
             return getSlotStartFrame(data, sIdx) + getSlotDuration(data, sIdx);
         }
 
@@ -1261,6 +1314,10 @@
                 var diff = nextSlot.time - slot.time;
                 if (diff > 0) return diff;
             }
+            if (slot && typeof slot.time === "number" && typeof data.endFrame === "number" && idx === data.slots.length - 1) {
+                var remaining = data.endFrame - slot.time;
+                if (remaining > 0) return remaining;
+            }
             if (slot && typeof slot.duration === "number" && !isNaN(slot.duration) && slot.duration > 0) {
                 return slot.duration;
             }
@@ -1410,7 +1467,10 @@
         }
 
         function render(data) {
-            if (data) normalizeData(data);
+            if (data) {
+                computeEndFrame(data);
+                normalizeData(data);
+            }
             markerWarnings = detectOverlaps(data);
             if (isHorizontal) {
                 renderHorizontal(data);
@@ -2169,20 +2229,20 @@
         // Normalize durations/outs so bad values don't corrupt layout or saves
         function normalizeData(data) {
             if (!data || !data.slots) return;
+            computeEndFrame(data);
             for (var s = 0; s < data.slots.length; s++) {
                 var slot = data.slots[s];
-                var slotDur = getSlotDuration(data, s);
-                if (!slotDur || isNaN(slotDur) || slotDur <= 0) slotDur = 600;
+                if (!slot) continue;
+                if (slot.duration !== undefined) {
+                    delete slot.duration;
+                }
                 if (!slot.clips) continue;
                 Object.keys(slot.clips).forEach(function (key) {
                     var c = slot.clips[key];
                     if (!c) return;
-                    if (typeof c === "string") {
-                        slot.clips[key] = { name: c, duration: slotDur, in: 0, out: slotDur };
-                        return;
+                    if (typeof c === "object" && c.name) {
+                        slot.clips[key] = c.name;
                     }
-                    if (isNaN(c.duration) || c.duration <= 0) c.duration = slotDur;
-                    if (isNaN(c.out) || c.out <= 0) c.out = c.duration;
                 });
             }
         }
