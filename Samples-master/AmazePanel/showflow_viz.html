@@ -886,6 +886,21 @@
             return sIdx + "__" + trKey;
         }
 
+        function getSlotStartFrame(data, sIdx) {
+            if (!data || !data.slots || sIdx < 0 || sIdx >= data.slots.length) return 0;
+            var slot = data.slots[sIdx];
+            if (slot && typeof slot.time === "number") return slot.time;
+            var total = 0;
+            for (var i = 0; i < sIdx; i++) {
+                total += getSlotDuration(data, i);
+            }
+            return total;
+        }
+
+        function getSlotEndFrame(data, sIdx) {
+            return getSlotStartFrame(data, sIdx) + getSlotDuration(data, sIdx);
+        }
+
         function collectSelectedClips() {
             if (!currentData || !currentData.slots) return [];
             var out = [];
@@ -897,14 +912,20 @@
                 var slot = currentData.slots[sIdx];
                 if (!slot || !slot.clips || !slot.clips[trKey]) return;
                 var clip = slot.clips[trKey];
-                var clipName = (clip && clip.name) ? clip.name : clip;
-                var duration = (clip && clip.duration) ? clip.duration : getSlotDuration(currentData, sIdx);
+                var start = getSlotStartFrame(currentData, sIdx);
+                var end = start;
+                if (clip && typeof clip === "object" && clip.out !== undefined && clip.in !== undefined) {
+                    end = start + (Number(clip.out) - Number(clip.in));
+                } else {
+                    end = getSlotEndFrame(currentData, sIdx);
+                }
+                if (end <= start) end = start + 1;
                 out.push({
                     slotIndex: sIdx,
                     track: trKey,
-                    name: clipName,
-                    duration: duration,
-                    time: slot.time || 0
+                    name: (clip && clip.name) ? clip.name : clip,
+                    duration: end - start,
+                    time: start
                 });
             });
             out.sort(function (a, b) {
@@ -1039,11 +1060,13 @@
             if (!clipData) return;
 
             var clipName = (clipData && clipData.name) ? clipData.name : clipData;
-            var startFrame = slot.time || 0;
-            var nextSlot = currentData.slots[sIdx + 1];
-            var endFrame = nextSlot && typeof nextSlot.time === "number"
-                ? nextSlot.time - 1
-                : (startFrame + getSlotDuration(currentData, sIdx));
+            var startFrame = getSlotStartFrame(currentData, sIdx);
+            var endFrame = startFrame;
+            if (clipData && typeof clipData === "object" && clipData.out !== undefined && clipData.in !== undefined) {
+                endFrame = startFrame + (Number(clipData.out) - Number(clipData.in));
+            } else {
+                endFrame = getSlotEndFrame(currentData, sIdx);
+            }
 
             try {
                 var extensionRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
