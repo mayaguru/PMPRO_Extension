@@ -1,0 +1,790 @@
+font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+margin: 0;
+padding: 0;
+height: 100vh;
+display: flex;
+flex-direction: column;
+}
+
+#header {
+background-color: #333;
+padding: 6px 15px;
+border-bottom: 1px solid #444;
+display: flex;
+justify-content: space-between;
+align-items: center;
+flex-shrink: 0;
+}
+
+#header h1 {
+margin: 0;
+font-size: 16px;
+color: #eee;
+margin-right: 15px;
+}
+
+#controls {
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.slider-control {
+display: flex;
+align-items: center;
+gap: 5px;
+font-size: 11px;
+color: #aaa;
+background: #2a2a2a;
+padding: 2px 8px;
+border-radius: 4px;
+border: 1px solid #444;
+}
+
+.slider-control input[type=range] {
+width: 80px;
+cursor: pointer;
+}
+
+#controls button {
+background: #444;
+border: 1px solid #555;
+color: #ddd;
+padding: 4px 8px;
+cursor: pointer;
+font-size: 11px;
+}
+
+#controls button:hover {
+background: #555;
+}
+
+#controls button.primary {
+background: #0078d7;
+border-color: #005a9e;
+color: white;
+}
+
+#controls button.active {
+background: #d74e00;
+border-color: #9e3a00;
+color: white;
+}
+
+#main-container {
+flex: 1;
+overflow: auto;
+display: flex;
+padding: 10px;
+position: relative;
+}
+
+/* Vertical Layout (Default) */
+.timeline-grid {
+display: grid;
+grid-template-columns: 100px;
+gap: var(--grid-gap);
+width: 100%;
+}
+
+/* Horizontal Layout */
+.timeline-grid.horizontal {
+display: flex;
+flex-direction: column;
+width: max-content;
+}
+
+.timeline-grid.horizontal .track-row {
+display: flex;
+gap: var(--grid-gap);
+margin-bottom: var(--grid-gap);
+}
+
+.timeline-grid.horizontal .track-label {
+width: 100px;
+display: flex;
+align-items: center;
+justify-content: center;
+background: #333;
+border-radius: 4px;
+font-weight: bold;
+font-size: 11px;
+padding: 4px;
+flex-shrink: 0;
+}
+
+.timeline-grid.horizontal .slot-cell {
+width: var(--card-width);
+}
+
+.timeline-grid.horizontal .time-row {
+display: flex;
+gap: var(--grid-gap);
+margin-bottom: 5px;
+padding-left: calc(100px + var(--grid-gap));
+}
+
+.timeline-grid.horizontal .time-marker-h {
+width: var(--card-width);
+font-size: 9px;
+color: #888;
+text-align: center;
+padding: 2px;
+}
+
+.timeline-grid.horizontal .insert-slot-btn {
+width: 30px;
+height: var(--card-height);
+background: #2a2a2a;
+border: 1px dashed #555;
+border-radius: 4px;
+display: flex;
+align-items: center;
+justify-content: center;
+cursor: pointer;
+color: #888;
+font-size: 16px;
+flex-shrink: 0;
+opacity: 0.5;
+transition: all 0.2s;
+}
+
+.timeline-grid.horizontal .insert-slot-btn:hover {
+opacity: 1;
+background: #333;
+color: #fff;
+}
+
+/* Time Column */
+.time-col {
+display: flex;
+flex-direction: column;
+align-items: flex-end;
+padding-right: 10px;
+border-right: 1px solid #444;
+}
+
+.time-marker {
+height: var(--card-height);
+display: flex;
+flex-direction: column;
+justify-content: center;
+font-size: 10px;
+color: #888;
+text-align: right;
+position: relative;
+}
+
+.time-marker .dur {
+font-size: 8px;
+color: #555;
+margin-top: 2px;
+}
+
+/* Insert Row Button */
+.insert-row-btn {
+position: absolute;
+top: calc(var(--grid-gap) * -0.5 - 10px);
+right: -25px;
+width: 18px;
+height: 18px;
+background: #444;
+color: #fff;
+border-radius: 50%;
+text-align: center;
+line-height: 18px;
+font-size: 12px;
+cursor: pointer;
+z-index: 10;
+opacity: 0;
+transition: opacity 0.2s;
+}
+
+.time-marker:hover .insert-row-btn {
+opacity: 1;
+}
+
+.track-header {
+text-align: center;
+font-weight: bold;
+margin-bottom: 5px;
+padding: 4px;
+background: #333;
+border-radius: 4px;
+font-size: 11px;
+}
+
+.slot-cell {
+height: var(--card-height);
+display: flex;
+align-items: center;
+justify-content: center;
+padding: 3px;
+box-sizing: border-box;
+border: 1px solid transparent;
+}
+
+.slot-cell.drag-over {
+border: 1px dashed #0078d7;
+background: rgba(0, 120, 215, 0.1);
+}
+
+.clip-card {
+background: #3a3a3a;
+border: 1px solid #555;
+border-radius: 4px;
+width: 100%;
+height: 95%;
+padding: 4px;
+box-sizing: border-box;
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+cursor: pointer;
+transition: all 0.2s;
+position: relative;
+overflow: hidden;
+}
+
+.clip-card:hover {
+background: #444;
+border-color: #777;
+transform: translateY(-1px);
+box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.clip-card.empty {
+background: transparent;
+border: 1px dashed #444;
+opacity: 0.5;
+}
+
+.clip-name {
+font-weight: bold;
+font-size: 10px;
+color: #fff;
+text-align: center;
+margin-bottom: 2px;
+word-break: break-all;
+max-width: 100%;
+line-height: 1.2;
+}
+
+.clip-meta {
+font-size: 8px;
+color: #aaa;
+}
+
+/* Delete Button */
+.delete-btn {
+position: absolute;
+top: -4px;
+right: -4px;
+width: 14px;
+height: 14px;
+background: #d70000;
+color: white;
+border-radius: 50%;
+text-align: center;
+line-height: 12px;
+font-size: 9px;
+cursor: pointer;
+display: none;
+border: 1px solid #fff;
+z-index: 5;
+}
+
+.edit-mode .delete-btn {
+display: block;
+}
+
+/* Modal */
+#edit-modal {
+display: none;
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.7);
+z-index: 100;
+justify-content: center;
+align-items: center;
+}
+
+.modal-content {
+background: #2d2d2d;
+padding: 20px;
+border-radius: 8px;
+width: 300px;
+border: 1px solid #555;
+}
+
+.modal-content h2 {
+margin-top: 0;
+font-size: 16px;
+color: #ddd;
+}
+
+.form-group {
+margin-bottom: 15px;
+}
+
+.form-group label {
+display: block;
+margin-bottom: 5px;
+font-size: 12px;
+color: #aaa;
+}
+
+.form-group input {
+width: 100%;
+padding: 6px;
+background: #1e1e1e;
+border: 1px solid #444;
+color: #fff;
+border-radius: 3px;
+box-sizing: border-box;
+}
+
+.modal-actions {
+display: flex;
+justify-content: flex-end;
+gap: 10px;
+}
+</style>
+</head>
+
+<body>
+
+    <div id="header">
+        <h1>Showflow Visual Editor</h1>
+        <div id="controls">
+            <div class="slider-control">
+                <label title="Card Width">W</label>
+                <input type="range" id="width-slider" min="100" max="200" value="150">
+            </div>
+            <div class="slider-control">
+                <label title="Card Height">H</label>
+                <input type="range" id="height-slider" min="50" max="120" value="84">
+            </div>
+            <button onclick="toggleLayout()" id="btn-layout">Horizontal</button>
+            <button onclick="toggleEditMode()" id="btn-edit-mode">Edit Mode</button>
+            <button onclick="window.location.href='index.html'">Back</button>
+            <button onclick="loadData()">Reload</button>
+            <button class="primary" onclick="saveData()">Save Changes</button>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div class="timeline-grid" id="grid-root">
+            <!-- Dynamic Content -->
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal">
+        <div class="modal-content">
+            <h2>Edit Clip</h2>
+            <div class="form-group">
+                <label>Clip Name</label>
+                <input type="text" id="edit-name">
+            </div>
+            <div class="form-group">
+                <label>Duration (frames)</label>
+                <input type="number" id="edit-duration">
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeModal()">Cancel</button>
+                <button class="primary" onclick="applyEdit()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var csInterface = new CSInterface();
+        var currentData = null;
+        var currentFilePath = null;
+        var editingTarget = null;
+        var isEditMode = false;
+        var isHorizontal = false;
+
+        function getFlowConfigPath() {
+            var osVersion = csInterface.getOSInformation();
+            var isWin = osVersion && osVersion.indexOf("Windows") >= 0;
+            var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+            if (isWin) extRoot = extRoot.replace(/\//g, "\\\\");
+            var sep = isWin ? "\\\\" : "/";
+            return extRoot + sep + "flow_config.json";
+        }
+
+        function loadData() {
+            var cfgPath = getFlowConfigPath();
+            var res = window.cep.fs.readFile(cfgPath);
+            if (res.err !== 0) {
+                alert("Could not read flow_config.json");
+                return;
+            }
+            var cfg = JSON.parse(res.data);
+            if (!cfg.flowPath) {
+                alert("No Flow Path set in config.");
+                return;
+            }
+
+            currentFilePath = cfg.flowPath;
+
+            var flowRes = window.cep.fs.readFile(currentFilePath);
+            if (flowRes.err !== 0) {
+                alert("Could not read Showflow JSON at: " + currentFilePath);
+                return;
+            }
+
+            try {
+                currentData = JSON.parse(flowRes.data);
+                render(currentData);
+            } catch (e) {
+                alert("Error parsing JSON: " + e);
+            }
+        }
+
+        function saveData() {
+            if (!currentFilePath || !currentData) return;
+            var json = JSON.stringify(currentData, null, 2);
+            var res = window.cep.fs.writeFile(currentFilePath, json);
+            if (res.err === 0) {
+                alert("Saved successfully!");
+            } else {
+                alert("Error saving file: " + res.err);
+            }
+        }
+
+        function toggleLayout() {
+            isHorizontal = !isHorizontal;
+            var btn = document.getElementById("btn-layout");
+            btn.textContent = isHorizontal ? "Vertical" : "Horizontal";
+            render(currentData);
+        }
+
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            var btn = document.getElementById("btn-edit-mode");
+            if (isEditMode) {
+                btn.classList.add("active");
+                document.body.classList.add("edit-mode");
+            } else {
+                btn.classList.remove("active");
+                document.body.classList.remove("edit-mode");
+            }
+            render(currentData);
+        }
+
+        function framesToTimecode(frames, fps) {
+            var totalSeconds = Math.floor(frames / fps);
+            var ff = frames % fps;
+            var mm = Math.floor(totalSeconds / 60);
+            var ss = totalSeconds % 60;
+            return pad(mm) + ":" + pad(ss) + ":" + pad(ff);
+        }
+
+        function pad(n) { return n < 10 ? "0" + n : n; }
+
+        function render(data) {
+            if (isHorizontal) {
+                renderHorizontal(data);
+            } else {
+                renderVertical(data);
+            }
+        }
+
+        function renderVertical(data) {
+            var root = document.getElementById("grid-root");
+            root.innerHTML = "";
+            root.className = "timeline-grid";
+
+            var fps = data.fps || 60;
+            var tracks = data.tracks || { "A": 0 };
+            var sortedTracks = Object.keys(tracks).sort();
+
+            var colTemplate = "100px";
+            sortedTracks.forEach(function () { colTemplate += " var(--card-width)"; });
+            root.style.gridTemplateColumns = colTemplate;
+
+            var timeHeader = document.createElement("div");
+            timeHeader.className = "time-col";
+            timeHeader.innerHTML = "<div class='track-header'>Time</div>";
+            root.appendChild(timeHeader);
+
+            sortedTracks.forEach(function (tr) {
+                var th = document.createElement("div");
+                th.className = "track-header";
+                th.textContent = "Track " + tr;
+                root.appendChild(th);
+            });
+
+            if (data.slots) {
+                data.slots.forEach(function (slot, sIdx) {
+                    var timeCell = document.createElement("div");
+                    timeCell.className = "time-marker";
+                    timeCell.innerHTML = "<span>" + framesToTimecode(slot.time, fps) + "</span>" +
+                        "<span class='dur'>Dur: " + slot.duration + "f</span>";
+
+                    var insertBtn = document.createElement("div");
+                    insertBtn.className = "insert-row-btn";
+                    insertBtn.textContent = "+";
+                    insertBtn.title = "Insert Row Here";
+                    insertBtn.onclick = function (e) {
+                        e.stopPropagation();
+                        insertSlot(sIdx);
+                    };
+                    timeCell.appendChild(insertBtn);
+                    root.appendChild(timeCell);
+
+                    sortedTracks.forEach(function (trKey) {
+                        var cell = createSlotCell(slot, sIdx, trKey, data);
+                        root.appendChild(cell);
+                    });
+                });
+
+                var finalTimeCell = document.createElement("div");
+                finalTimeCell.className = "time-marker";
+                finalTimeCell.style.height = "20px";
+                var finalInsertBtn = document.createElement("div");
+                finalInsertBtn.className = "insert-row-btn";
+                finalInsertBtn.style.top = "0";
+                finalInsertBtn.textContent = "+";
+                finalInsertBtn.title = "Append Row";
+                finalInsertBtn.onclick = function (e) {
+                    e.stopPropagation();
+                    insertSlot(data.slots.length);
+                };
+                finalTimeCell.appendChild(finalInsertBtn);
+                root.appendChild(finalTimeCell);
+            }
+        }
+
+        function renderHorizontal(data) {
+            var root = document.getElementById("grid-root");
+            root.innerHTML = "";
+            root.className = "timeline-grid horizontal";
+
+            var fps = data.fps || 60;
+            var tracks = data.tracks || { "A": 0 };
+            var sortedTracks = Object.keys(tracks).sort();
+
+            if (data.slots && data.slots.length > 0) {
+                var timeRow = document.createElement("div");
+                timeRow.className = "time-row";
+
+                data.slots.forEach(function (slot, sIdx) {
+                    var timeMarker = document.createElement("div");
+                    timeMarker.className = "time-marker-h";
+                    timeMarker.textContent = framesToTimecode(slot.time, fps);
+                    timeRow.appendChild(timeMarker);
+
+                    var insertBtn = document.createElement("div");
+                    insertBtn.className = "insert-slot-btn";
+                    insertBtn.textContent = "+";
+                    insertBtn.title = "Insert Slot";
+                    insertBtn.onclick = function (e) {
+                        e.stopPropagation();
+                        insertSlot(sIdx + 1);
+                    };
+                    timeRow.appendChild(insertBtn);
+                });
+
+                root.appendChild(timeRow);
+
+                sortedTracks.forEach(function (trKey) {
+                    var trackRow = document.createElement("div");
+                    trackRow.className = "track-row";
+
+                    var trackLabel = document.createElement("div");
+                    trackLabel.className = "track-label";
+                    trackLabel.textContent = "Track " + trKey;
+                    trackRow.appendChild(trackLabel);
+
+                    data.slots.forEach(function (slot, sIdx) {
+                        var cell = createSlotCell(slot, sIdx, trKey, data);
+                        trackRow.appendChild(cell);
+
+                        var spacer = document.createElement("div");
+                        spacer.style.width = "30px";
+                        spacer.style.flexShrink = "0";
+                        trackRow.appendChild(spacer);
+                    });
+
+                    root.appendChild(trackRow);
+                });
+            }
+        }
+
+        function createSlotCell(slot, sIdx, trKey, data) {
+            var cell = document.createElement("div");
+            cell.className = "slot-cell";
+
+            cell.ondragover = function (e) {
+                e.preventDefault();
+                cell.classList.add("drag-over");
+            };
+            cell.ondragleave = function (e) {
+                cell.classList.remove("drag-over");
+            };
+            cell.ondrop = function (e) {
+                e.preventDefault();
+                cell.classList.remove("drag-over");
+                var srcData = JSON.parse(e.dataTransfer.getData("text/plain"));
+                moveClip(srcData.sIdx, srcData.trKey, sIdx, trKey);
+            };
+
+            var clipData = slot.clips ? slot.clips[trKey] : null;
+            var card = document.createElement("div");
+            card.className = "clip-card" + (clipData ? "" : " empty");
+
+            if (clipData) {
+                card.draggable = true;
+                card.ondragstart = function (e) {
+                    e.dataTransfer.setData("text/plain", JSON.stringify({ sIdx: sIdx, trKey: trKey }));
+                    e.dataTransfer.effectAllowed = "move";
+                };
+
+                var cName = clipData.name || clipData;
+                var cDur = clipData.duration || slot.duration;
+
+                var deleteBtnHTML = "";
+                if (isEditMode) {
+                    deleteBtnHTML = "<div class='delete-btn' onclick='deleteClip(" + sIdx + ", \"" + trKey + "\", event)'>x</div>";
+                }
+
+                card.innerHTML = deleteBtnHTML +
+                    "<div class='clip-name'>" + cName + "</div>" +
+                    "<div class='clip-meta'>" + cDur + "f</div>";
+
+                card.onclick = function () {
+                    if (!isEditMode) openEdit(sIdx, trKey, clipData);
+                };
+            } else {
+                card.innerHTML = "<div class='clip-meta'>+</div>";
+                card.onclick = function () {
+                    var newClip = { name: "NewClip", duration: slot.duration, in: 0, out: slot.duration };
+                    if (!slot.clips) slot.clips = {};
+                    slot.clips[trKey] = newClip;
+                    render(currentData);
+                };
+            }
+
+            cell.appendChild(card);
+            return cell;
+        }
+
+        function openEdit(sIdx, trKey, clipData) {
+            editingTarget = { sIdx: sIdx, trKey: trKey };
+            var cName = clipData.name || clipData;
+            var cDur = clipData.duration || 0;
+
+            document.getElementById("edit-name").value = cName;
+            document.getElementById("edit-duration").value = cDur;
+
+            document.getElementById("edit-modal").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("edit-modal").style.display = "none";
+            editingTarget = null;
+        }
+
+        function applyEdit() {
+            if (!editingTarget) return;
+            var sIdx = editingTarget.sIdx;
+            var trKey = editingTarget.trKey;
+
+            var newName = document.getElementById("edit-name").value;
+            var newDur = parseInt(document.getElementById("edit-duration").value, 10);
+
+            var slot = currentData.slots[sIdx];
+            if (slot && slot.clips && slot.clips[trKey]) {
+                var c = slot.clips[trKey];
+                if (typeof c === "string") {
+                    slot.clips[trKey] = { name: newName, duration: newDur, in: 0, out: newDur };
+                } else {
+                    c.name = newName;
+                    c.duration = newDur;
+                }
+            }
+
+            closeModal();
+            render(currentData);
+        }
+
+        function deleteClip(sIdx, trKey, e) {
+            e.stopPropagation();
+            if (!confirm("Delete this clip?")) return;
+
+            var slot = currentData.slots[sIdx];
+            if (slot && slot.clips) {
+                delete slot.clips[trKey];
+                render(currentData);
+            }
+        }
+
+        function insertSlot(index) {
+            var newSlot = {
+                time: 0,
+                duration: 600,
+                clips: {}
+            };
+
+            currentData.slots.splice(index, 0, newSlot);
+
+            var runningTime = 0;
+            currentData.slots.forEach(function (s) {
+                s.time = runningTime;
+                runningTime += (s.duration || 0);
+            });
+
+            render(currentData);
+        }
+
+        function moveClip(srcIdx, srcTrKey, destIdx, destTrKey) {
+            if (srcIdx === destIdx && srcTrKey === destTrKey) return;
+
+            var srcSlot = currentData.slots[srcIdx];
+            var destSlot = currentData.slots[destIdx];
+
+            if (!srcSlot || !srcSlot.clips || !srcSlot.clips[srcTrKey]) return;
+
+            var clipToMove = srcSlot.clips[srcTrKey];
+
+            if (!destSlot.clips) destSlot.clips = {};
+
+            var destClip = destSlot.clips[destTrKey];
+
+            destSlot.clips[destTrKey] = clipToMove;
+
+            if (destClip) {
+                srcSlot.clips[srcTrKey] = destClip;
+            } else {
+                delete srcSlot.clips[srcTrKey];
+            }
+
+            render(currentData);
+        }
+
+        $(document).ready(function () {
+            $('#width-slider').on('input', function () {
+                document.documentElement.style.setProperty('--card-width', this.value + 'px');
+            });
+            $('#height-slider').on('input', function () {
+                var height = this.value;
+                document.documentElement.style.setProperty('--card-height', height + 'px');
+                var gap = Math.max(2, Math.round(height * 5 / 84));
+                document.documentElement.style.setProperty('--grid-gap', gap + 'px');
+            });
+
+            loadData();
+        });
+
+    </script>
+</body>
+
+</html>

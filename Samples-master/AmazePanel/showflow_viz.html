@@ -10,12 +10,14 @@
     <style>
         :root {
             --card-width: 150px;
-            --card-height: 84px;
+            --card-height: 60px;
             --grid-gap: 5px;
+            --timeline-scale: 1;
+            --track-height: 50px;
         }
 
         body {
-            background-color: #232323;
+            background-color: #1a1a1a;
             color: #b5b5b5;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
@@ -26,7 +28,7 @@
         }
 
         #header {
-            background-color: #333;
+            background-color: #2a2a2a;
             padding: 6px 15px;
             border-bottom: 1px solid #444;
             display: flex;
@@ -54,7 +56,7 @@
             gap: 5px;
             font-size: 11px;
             color: #aaa;
-            background: #2a2a2a;
+            background: #1e1e1e;
             padding: 2px 8px;
             border-radius: 4px;
             border: 1px solid #444;
@@ -66,16 +68,17 @@
         }
 
         #controls button {
-            background: #444;
+            background: #3a3a3a;
             border: 1px solid #555;
             color: #ddd;
             padding: 4px 8px;
             cursor: pointer;
             font-size: 11px;
+            border-radius: 3px;
         }
 
         #controls button:hover {
-            background: #555;
+            background: #4a4a4a;
         }
 
         #controls button.primary {
@@ -94,87 +97,238 @@
             flex: 1;
             overflow: auto;
             display: flex;
-            padding: 10px;
+            padding: 0;
             position: relative;
+            background: #1a1a1a;
         }
 
-        /* Vertical Layout (Default) */
+        /* Vertical Layout (Tree View) */
         .timeline-grid {
             display: grid;
             grid-template-columns: 100px;
             gap: var(--grid-gap);
             width: 100%;
+            padding: 10px;
         }
 
-        /* Horizontal Layout */
+        /* Horizontal Layout (Timeline Editor) */
         .timeline-grid.horizontal {
             display: flex;
-            flex-direction: column;
+            flex-direction: column-reverse;
             width: max-content;
+            min-width: 100%;
+            padding: 0;
+            background: #1a1a1a;
         }
 
-        .timeline-grid.horizontal .track-row {
+        /* Timeline Ruler */
+        .timeline-ruler {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: #2a2a2a;
+            border-bottom: 2px solid #444;
+            height: 40px;
             display: flex;
-            gap: var(--grid-gap);
-            margin-bottom: var(--grid-gap);
+            margin-left: 120px;
         }
 
-        .timeline-grid.horizontal .track-label {
-            width: 100px;
+        .ruler-marker {
+            position: absolute;
+            border-left: 1px solid #555;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 2px 0;
+        }
+
+        .ruler-marker.major {
+            border-left-color: #888;
+        }
+
+        .ruler-time {
+            font-size: 9px;
+            color: #999;
+            padding-left: 3px;
+            white-space: nowrap;
+        }
+
+        .ruler-frames {
+            font-size: 7px;
+            color: #666;
+            padding-left: 3px;
+        }
+
+        /* Track Row */
+        .track-row {
+            display: flex;
+            height: var(--track-height);
+            border-bottom: 1px solid #2a2a2a;
+            position: relative;
+            background: #1e1e1e;
+        }
+
+        .track-row:hover {
+            background: #232323;
+        }
+
+        .track-label {
+            width: 120px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            background: #333;
-            border-radius: 4px;
+            justify-content: flex-end;
+            padding-right: 10px;
+            background: #2a2a2a;
+            border-right: 1px solid #444;
             font-weight: bold;
             font-size: 11px;
-            padding: 4px;
+            color: #aaa;
             flex-shrink: 0;
+            position: sticky;
+            left: 0;
+            z-index: 10;
         }
 
-        .timeline-grid.horizontal .slot-cell {
-            width: var(--card-width);
-        }
-
-        .timeline-grid.horizontal .time-row {
+        .track-content {
+            flex: 1;
+            position: relative;
             display: flex;
-            gap: var(--grid-gap);
-            margin-bottom: 5px;
-            padding-left: calc(100px + var(--grid-gap));
+            align-items: center;
         }
 
-        .timeline-grid.horizontal .time-marker-h {
-            width: var(--card-width);
-            font-size: 9px;
-            color: #888;
+        /* Timeline Clip */
+        .timeline-clip {
+            position: absolute;
+            height: 90%;
+            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+            border: 1px solid #5aa3ff;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            padding: 0 6px;
+            cursor: move;
+            transition: all 0.15s;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .timeline-clip:hover {
+            background: linear-gradient(135deg, #5aa3ff 0%, #4a90e2 100%);
+            border-color: #7bb8ff;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+            z-index: 5;
+        }
+
+        .timeline-clip.dragging {
+            opacity: 0.6;
+            z-index: 100;
+        }
+
+        .clip-content {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .clip-name {
+            font-weight: 600;
+            font-size: 10px;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .clip-duration {
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.8);
+            white-space: nowrap;
+        }
+
+        .clip-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            cursor: ew-resize;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .clip-handle.left {
+            left: 0;
+        }
+
+        .clip-handle.right {
+            right: 0;
+        }
+
+        .timeline-clip:hover .clip-handle {
+            opacity: 1;
+        }
+
+        /* Delete Button */
+        .delete-btn {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 16px;
+            height: 16px;
+            background: #d70000;
+            color: white;
+            border-radius: 50%;
             text-align: center;
-            padding: 2px;
+            line-height: 14px;
+            font-size: 10px;
+            cursor: pointer;
+            display: none;
+            border: 2px solid #1a1a1a;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
         }
 
-        .timeline-grid.horizontal .insert-slot-btn {
-            width: 30px;
-            height: var(--card-height);
-            background: #2a2a2a;
-            border: 1px dashed #555;
-            border-radius: 4px;
+        .edit-mode .delete-btn {
+            display: block;
+        }
+
+        .delete-btn:hover {
+            background: #ff0000;
+            transform: scale(1.1);
+        }
+
+        /* Empty Slot Indicator */
+        .empty-slot {
+            position: absolute;
+            height: 60%;
+            background: transparent;
+            border: 1px dashed #444;
+            border-radius: 3px;
             display: flex;
             align-items: center;
             justify-content: center;
+            color: #555;
+            font-size: 18px;
             cursor: pointer;
-            color: #888;
-            font-size: 16px;
-            flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .track-row:hover .empty-slot {
             opacity: 0.5;
-            transition: all 0.2s;
         }
 
-        .timeline-grid.horizontal .insert-slot-btn:hover {
-            opacity: 1;
-            background: #333;
-            color: #fff;
+        .empty-slot:hover {
+            opacity: 1 !important;
+            background: rgba(255, 255, 255, 0.02);
+            border-color: #666;
+            color: #888;
         }
 
-        /* Time Column */
+        /* Vertical Mode Styles */
         .time-col {
             display: flex;
             flex-direction: column;
@@ -200,7 +354,6 @@
             margin-top: 2px;
         }
 
-        /* Insert Row Button */
         .insert-row-btn {
             position: absolute;
             top: calc(var(--grid-gap) * -0.5 - 10px);
@@ -279,7 +432,7 @@
             opacity: 0.5;
         }
 
-        .clip-name {
+        .clip-card .clip-name {
             font-weight: bold;
             font-size: 10px;
             color: #fff;
@@ -288,34 +441,12 @@
             word-break: break-all;
             max-width: 100%;
             line-height: 1.2;
+            text-shadow: none;
         }
 
-        .clip-meta {
+        .clip-card .clip-meta {
             font-size: 8px;
             color: #aaa;
-        }
-
-        /* Delete Button */
-        .delete-btn {
-            position: absolute;
-            top: -4px;
-            right: -4px;
-            width: 14px;
-            height: 14px;
-            background: #d70000;
-            color: white;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 12px;
-            font-size: 9px;
-            cursor: pointer;
-            display: none;
-            border: 1px solid #fff;
-            z-index: 5;
-        }
-
-        .edit-mode .delete-btn {
-            display: block;
         }
 
         /* Modal */
@@ -326,8 +457,8 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
             justify-content: center;
             align-items: center;
         }
@@ -338,12 +469,13 @@
             border-radius: 8px;
             width: 300px;
             border: 1px solid #555;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
         }
 
         .modal-content h2 {
             margin-top: 0;
             font-size: 16px;
-            color: #ddd;
+            color: #eee;
         }
 
         .form-group {
@@ -380,15 +512,15 @@
     <div id="header">
         <h1>Showflow Visual Editor</h1>
         <div id="controls">
-            <div class="slider-control">
-                <label title="Card Width">W</label>
-                <input type="range" id="width-slider" min="100" max="200" value="150">
+            <div class="slider-control" id="zoom-control" style="display:none;">
+                <label title="Timeline Zoom">Zoom</label>
+                <input type="range" id="zoom-slider" min="0.5" max="3" step="0.1" value="1">
             </div>
-            <div class="slider-control">
-                <label title="Card Height">H</label>
-                <input type="range" id="height-slider" min="50" max="120" value="84">
+            <div class="slider-control" id="height-control">
+                <label title="Track Height">H</label>
+                <input type="range" id="height-slider" min="40" max="100" value="50">
             </div>
-            <button onclick="toggleLayout()" id="btn-layout">Horizontal</button>
+            <button onclick="toggleLayout()" id="btn-layout">Timeline View</button>
             <button onclick="toggleEditMode()" id="btn-edit-mode">Edit Mode</button>
             <button onclick="window.location.href='index.html'">Back</button>
             <button onclick="loadData()">Reload</button>
@@ -428,6 +560,7 @@
         var editingTarget = null;
         var isEditMode = false;
         var isHorizontal = false;
+        var timelineScale = 1;
 
         function getFlowConfigPath() {
             var osVersion = csInterface.getOSInformation();
@@ -481,7 +614,16 @@
         function toggleLayout() {
             isHorizontal = !isHorizontal;
             var btn = document.getElementById("btn-layout");
-            btn.textContent = isHorizontal ? "Vertical" : "Horizontal";
+            var zoomControl = document.getElementById("zoom-control");
+
+            if (isHorizontal) {
+                btn.textContent = "Tree View";
+                zoomControl.style.display = "flex";
+            } else {
+                btn.textContent = "Timeline View";
+                zoomControl.style.display = "none";
+            }
+
             render(currentData);
         }
 
@@ -514,6 +656,134 @@
             } else {
                 renderVertical(data);
             }
+        }
+
+        function renderHorizontal(data) {
+            var root = document.getElementById("grid-root");
+            root.innerHTML = "";
+            root.className = "timeline-grid horizontal";
+
+            var fps = data.fps || 60;
+            var tracks = data.tracks || { "A": 0 };
+            var sortedTracks = Object.keys(tracks).sort();
+
+            // Calculate total timeline duration
+            var totalDuration = 0;
+            if (data.slots && data.slots.length > 0) {
+                var lastSlot = data.slots[data.slots.length - 1];
+                totalDuration = lastSlot.time + lastSlot.duration;
+            }
+
+            // Pixels per frame (zoom factor)
+            var pixelsPerFrame = 0.5 * timelineScale;
+            var timelineWidth = totalDuration * pixelsPerFrame;
+
+            // Create ruler
+            var ruler = document.createElement("div");
+            ruler.className = "timeline-ruler";
+            ruler.style.width = timelineWidth + "px";
+
+            // Add ruler markers every 60 frames (1 second at 60fps)
+            var markerInterval = 60;
+            for (var i = 0; i <= totalDuration; i += markerInterval) {
+                var marker = document.createElement("div");
+                marker.className = "ruler-marker major";
+                marker.style.left = (i * pixelsPerFrame) + "px";
+
+                var timeLabel = document.createElement("div");
+                timeLabel.className = "ruler-time";
+                timeLabel.textContent = framesToTimecode(i, fps);
+                marker.appendChild(timeLabel);
+
+                var frameLabel = document.createElement("div");
+                frameLabel.className = "ruler-frames";
+                frameLabel.textContent = i + "f";
+                marker.appendChild(frameLabel);
+
+                ruler.appendChild(marker);
+            }
+
+            root.appendChild(ruler);
+
+            // Create tracks (reversed order - bottom to top)
+            sortedTracks.reverse().forEach(function (trKey) {
+                var trackRow = document.createElement("div");
+                trackRow.className = "track-row";
+
+                var trackLabel = document.createElement("div");
+                trackLabel.className = "track-label";
+                trackLabel.textContent = "Track " + trKey;
+                trackRow.appendChild(trackLabel);
+
+                var trackContent = document.createElement("div");
+                trackContent.className = "track-content";
+                trackContent.style.width = timelineWidth + "px";
+
+                // Add clips to track
+                if (data.slots) {
+                    data.slots.forEach(function (slot, sIdx) {
+                        var clipData = slot.clips ? slot.clips[trKey] : null;
+
+                        if (clipData) {
+                            var clip = createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps);
+                            trackContent.appendChild(clip);
+                        }
+                    });
+                }
+
+                trackRow.appendChild(trackContent);
+                root.appendChild(trackRow);
+            });
+        }
+
+        function createTimelineClip(clipData, slot, sIdx, trKey, pixelsPerFrame, fps) {
+            var clip = document.createElement("div");
+            clip.className = "timeline-clip";
+
+            var cName = clipData.name || clipData;
+            var cDur = clipData.duration || slot.duration;
+            var startPos = slot.time * pixelsPerFrame;
+            var width = cDur * pixelsPerFrame;
+
+            clip.style.left = startPos + "px";
+            clip.style.width = Math.max(width, 20) + "px";
+
+            // Clip content
+            var content = document.createElement("div");
+            content.className = "clip-content";
+
+            var nameDiv = document.createElement("div");
+            nameDiv.className = "clip-name";
+            nameDiv.textContent = cName;
+            content.appendChild(nameDiv);
+
+            var durDiv = document.createElement("div");
+            durDiv.className = "clip-duration";
+            durDiv.textContent = cDur + "f";
+            content.appendChild(durDiv);
+
+            clip.appendChild(content);
+
+            // Delete button
+            if (isEditMode) {
+                var deleteBtn = document.createElement("div");
+                deleteBtn.className = "delete-btn";
+                deleteBtn.textContent = "×";
+                deleteBtn.onclick = function (e) {
+                    e.stopPropagation();
+                    deleteClip(sIdx, trKey, e);
+                };
+                clip.appendChild(deleteBtn);
+            }
+
+            // Click to edit
+            clip.onclick = function (e) {
+                if (!isEditMode) {
+                    openEdit(sIdx, trKey, clipData);
+                }
+            };
+
+            return clip;
         }
 
         function renderVertical(data) {
@@ -582,62 +852,6 @@
             }
         }
 
-        function renderHorizontal(data) {
-            var root = document.getElementById("grid-root");
-            root.innerHTML = "";
-            root.className = "timeline-grid horizontal";
-
-            var fps = data.fps || 60;
-            var tracks = data.tracks || { "A": 0 };
-            var sortedTracks = Object.keys(tracks).sort();
-
-            if (data.slots && data.slots.length > 0) {
-                var timeRow = document.createElement("div");
-                timeRow.className = "time-row";
-
-                data.slots.forEach(function (slot, sIdx) {
-                    var timeMarker = document.createElement("div");
-                    timeMarker.className = "time-marker-h";
-                    timeMarker.textContent = framesToTimecode(slot.time, fps);
-                    timeRow.appendChild(timeMarker);
-
-                    var insertBtn = document.createElement("div");
-                    insertBtn.className = "insert-slot-btn";
-                    insertBtn.textContent = "+";
-                    insertBtn.title = "Insert Slot";
-                    insertBtn.onclick = function (e) {
-                        e.stopPropagation();
-                        insertSlot(sIdx + 1);
-                    };
-                    timeRow.appendChild(insertBtn);
-                });
-
-                root.appendChild(timeRow);
-
-                sortedTracks.forEach(function (trKey) {
-                    var trackRow = document.createElement("div");
-                    trackRow.className = "track-row";
-
-                    var trackLabel = document.createElement("div");
-                    trackLabel.className = "track-label";
-                    trackLabel.textContent = "Track " + trKey;
-                    trackRow.appendChild(trackLabel);
-
-                    data.slots.forEach(function (slot, sIdx) {
-                        var cell = createSlotCell(slot, sIdx, trKey, data);
-                        trackRow.appendChild(cell);
-
-                        var spacer = document.createElement("div");
-                        spacer.style.width = "30px";
-                        spacer.style.flexShrink = "0";
-                        trackRow.appendChild(spacer);
-                    });
-
-                    root.appendChild(trackRow);
-                });
-            }
-        }
-
         function createSlotCell(slot, sIdx, trKey, data) {
             var cell = document.createElement("div");
             cell.className = "slot-cell";
@@ -672,7 +886,7 @@
 
                 var deleteBtnHTML = "";
                 if (isEditMode) {
-                    deleteBtnHTML = "<div class='delete-btn' onclick='deleteClip(" + sIdx + ", \"" + trKey + "\", event)'>x</div>";
+                    deleteBtnHTML = "<div class='delete-btn' onclick='deleteClip(" + sIdx + ", \"" + trKey + "\", event)'>×</div>";
                 }
 
                 card.innerHTML = deleteBtnHTML +
@@ -790,14 +1004,16 @@
         }
 
         $(document).ready(function () {
-            $('#width-slider').on('input', function () {
-                document.documentElement.style.setProperty('--card-width', this.value + 'px');
+            $('#zoom-slider').on('input', function () {
+                timelineScale = parseFloat(this.value);
+                document.documentElement.style.setProperty('--timeline-scale', timelineScale);
+                if (isHorizontal) render(currentData);
             });
+
             $('#height-slider').on('input', function () {
                 var height = this.value;
+                document.documentElement.style.setProperty('--track-height', height + 'px');
                 document.documentElement.style.setProperty('--card-height', height + 'px');
-                var gap = Math.max(2, Math.round(height * 5 / 84));
-                document.documentElement.style.setProperty('--grid-gap', gap + 'px');
             });
 
             loadData();
