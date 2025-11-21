@@ -200,6 +200,83 @@
             color: #ededed;
         }
 
+        #tab-backups .panel-card {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        .backup-card .backup-meta {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: var(--muted);
+            padding: 6px 0 10px;
+        }
+
+        .backup-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 6px 0;
+        }
+
+        .backup-status {
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+
+        .backup-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .backup-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #232323;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 8px 12px;
+            gap: 12px;
+        }
+
+        .backup-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .backup-name {
+            font-weight: 600;
+            color: #f0f0f0;
+            word-break: break-all;
+        }
+
+        .backup-meta-text {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .backup-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .backup-empty {
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+            padding: 20px 0;
+        }
+
         .card-head {
             display: flex;
             align-items: center;
@@ -260,6 +337,16 @@
             background: linear-gradient(135deg, var(--accent), var(--accent-strong));
             color: #111;
             border-color: var(--accent);
+        }
+
+        .pill-btn.ghost {
+            background: transparent;
+            border-color: #555;
+            color: var(--muted);
+        }
+
+        .pill-btn.ghost:hover {
+            color: var(--text);
         }
 
         .path-row {
@@ -365,6 +452,9 @@
                 $(".tab-btn[data-tab='" + tab + "']").addClass("active");
                 $(".tab-panel").removeClass("active");
                 $("#tab-" + tab).addClass("active");
+                if (tab === "backups") {
+                    refreshBackupList();
+                }
             }
 
             $(".tab-btn").on("click", function () {
@@ -455,6 +545,38 @@
                 runAmazeScript("11_Queue_Markers_To_AME.jsx");
             });
 
+            $("#backup-refresh").on("click", function (e) {
+                e.preventDefault();
+                refreshBackupList();
+            });
+
+            $("#backup-open-folder").on("click", function (e) {
+                e.preventDefault();
+                openBackupFolder(backupFolderPath);
+            });
+
+            $("#backup-manual").on("click", function (e) {
+                e.preventDefault();
+                requestManualBackup();
+            });
+
+            $("#backup-list-panel").on("click", ".restore-btn", function (e) {
+                e.preventDefault();
+                var path = $(this).data("path");
+                restoreBackupFile(path);
+            });
+
+            $("#backup-list-panel").on("click", ".reveal-btn", function (e) {
+                e.preventDefault();
+                var path = $(this).data("path");
+                var folder = "";
+                if (path && typeof path === "string") {
+                    folder = path.replace(/[^\\/]+$/, "");
+                }
+                if (!folder) folder = backupFolderPath;
+                openBackupFolder(folder);
+            });
+
             // ----- Flow JSON selector (panel layer) -----
             var CONFIG_FILE = "flow_config.json";
             var flowPathEl = $("#flowPath");
@@ -464,6 +586,12 @@
             var flowMatchEl = $("#flowMatchDot");
             var flowNameEl = $("#flow_file_name");
             var currentFlowName = "";
+            var backupFlowLabel = $("#backup-flow-path");
+            var backupFolderLabel = $("#backup-folder-path");
+            var backupListEl = $("#backup-list-panel");
+            var backupStatusEl = $("#backup-status");
+            var backupFlowPath = "";
+            var backupFolderPath = "";
 
             function baseName(path) {
                 if (!path) return "";
@@ -497,6 +625,211 @@
                 dot.title = match ? "Flow matches project prefix" : "Flow does not match project prefix";
             };
 
+            function sanitizeBackupSegment(name) {
+                var safe = (name || "flow").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+                safe = safe.replace(/\s+/g, "_");
+                if (!safe) safe = "flow";
+                return safe;
+            }
+
+            function backupInfoFromFlowPath(flowPath) {
+                if (!flowPath) return null;
+                var usesBackslash = flowPath.indexOf("\\") >= 0;
+                var normalized = flowPath.replace(/\\/g, "/");
+                var lastSlash = normalized.lastIndexOf("/");
+                var dir = lastSlash >= 0 ? normalized.substring(0, lastSlash) : "";
+                var file = lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+                var base = file.replace(/\.[^.]+$/, "");
+                var safeBase = sanitizeBackupSegment(base);
+                var folder = dir + "/__showflow_backups/" + safeBase;
+                if (usesBackslash) {
+                    folder = folder.replace(/\//g, "\\");
+                }
+                var sep = usesBackslash ? "\\" : "/";
+                return {
+                    folderPath: folder,
+                    separator: sep,
+                    fileName: file,
+                    safeBase: safeBase
+                };
+            }
+
+            function joinPaths(dir, child, sepOverride) {
+                if (!dir) return child;
+                var sep = sepOverride || (dir.indexOf("\\") >= 0 ? "\\" : "/");
+                if (dir.endsWith("\\") || dir.endsWith("/")) {
+                    return dir + child;
+                }
+                return dir + sep + child;
+            }
+
+            function parseBackupName(name) {
+                var match = name.match(/__(\d{8}-\d{6})/);
+                if (!match) {
+                    return {
+                        label: name,
+                        sortValue: name.toLowerCase(),
+                        iso: ""
+                    };
+                }
+                var stamp = match[1]; // YYYYMMDD-HHMMSS
+                var date = null;
+                try {
+                    var year = parseInt(stamp.substring(0, 4), 10);
+                    var month = parseInt(stamp.substring(4, 6), 10) - 1;
+                    var day = parseInt(stamp.substring(6, 8), 10);
+                    var hour = parseInt(stamp.substring(9, 11), 10);
+                    var min = parseInt(stamp.substring(11, 13), 10);
+                    var sec = parseInt(stamp.substring(13, 15), 10);
+                    date = new Date(year, month, day, hour, min, sec);
+                } catch (e) {
+                    date = null;
+                }
+                var label = date ? date.toLocaleString() : stamp;
+                var sortValue = date ? date.getTime() : stamp;
+                return {
+                    label: label,
+                    sortValue: sortValue,
+                    iso: stamp
+                };
+            }
+
+            function setBackupStatus(text) {
+                if (!backupStatusEl || backupStatusEl.length === 0) return;
+                backupStatusEl.text(text || "");
+            }
+
+            function updateBackupMeta(flowPath, overrideFolder) {
+                backupFlowPath = flowPath || "";
+                var info = backupInfoFromFlowPath(flowPath);
+                backupFolderPath = overrideFolder || (info ? info.folderPath : "");
+                if (backupFlowLabel && backupFlowLabel.length) {
+                    backupFlowLabel.text(backupFlowPath || "[not set]");
+                }
+                if (backupFolderLabel && backupFolderLabel.length) {
+                    backupFolderLabel.text(backupFolderPath || "[not created]");
+                }
+            }
+
+            function renderBackupEntries(entries) {
+                if (!backupListEl || backupListEl.length === 0) return;
+                if (!entries || entries.length === 0) {
+                    backupListEl.html("<div class='backup-empty'>No backups found for this showflow yet.</div>");
+                    return;
+                }
+                var html = entries.map(function (item) {
+                    return "<div class='backup-row'>" +
+                        "<div class='backup-info'>" +
+                        "<div class='backup-name'>" + item.name + "</div>" +
+                        "<div class='backup-meta-text'>" + item.label + "</div>" +
+                        "</div>" +
+                        "<div class='backup-actions'>" +
+                        "<button class='pill-btn restore-btn' data-path=\"" + item.path.replace(/\"/g, "&quot;") + "\">Restore</button>" +
+                        "<button class='pill-btn ghost reveal-btn' data-path=\"" + item.path.replace(/\"/g, "&quot;") + "\">Reveal</button>" +
+                        "</div>" +
+                        "</div>";
+                }).join("");
+                backupListEl.html(html);
+            }
+
+            function refreshBackupList() {
+                var cfg = loadFlowConfig();
+                var flowPath = (cfg && cfg.flowPath) ? cfg.flowPath : "";
+                updateBackupMeta(flowPath);
+                if (!flowPath) {
+                    renderBackupEntries([]);
+                    setBackupStatus("Pick a showflow file to enable backups.");
+                    return;
+                }
+                var info = backupInfoFromFlowPath(flowPath);
+                if (!info) {
+                    renderBackupEntries([]);
+                    setBackupStatus("Unable to determine backup folder.");
+                    return;
+                }
+                var folderListing = window.cep.fs.readdir(info.folderPath);
+                if (folderListing.err !== 0 || !folderListing.data || folderListing.data.length === 0) {
+                    renderBackupEntries([]);
+                    setBackupStatus("No backups saved yet.");
+                    return;
+                }
+                var entries = folderListing.data.filter(function (name) {
+                    return /\.json$/i.test(name);
+                }).map(function (name) {
+                    var parsed = parseBackupName(name);
+                    return {
+                        name: name,
+                        label: parsed.label,
+                        sortValue: parsed.sortValue,
+                        path: joinPaths(info.folderPath, name, info.separator)
+                    };
+                }).sort(function (a, b) {
+                    return b.sortValue - a.sortValue;
+                });
+                renderBackupEntries(entries);
+                setBackupStatus(entries.length + " backup(s) available");
+            }
+
+            function openBackupFolder(path) {
+                if (!path) {
+                    alert("No backup folder available.");
+                    return;
+                }
+                var jsx = "(function(){\n" +
+                    "var folder = new Folder(decodeURIComponent('" + encodeURIComponent(path) + "'));\n" +
+                    "if(!folder.exists){return 'missing';}\n" +
+                    "try{folder.execute();return 'ok';}catch(e){return e.toString();}\n" +
+                    "})();";
+                var csInterface = new CSInterface();
+                csInterface.evalScript(jsx, function (res) {
+                    if (res !== "ok") {
+                        alert("Unable to open folder: " + res);
+                    }
+                });
+            }
+
+            function requestManualBackup() {
+                var frame = document.getElementById("showflowFrame");
+                if (!frame || !frame.contentWindow) {
+                    alert("Showflow editor is not available.");
+                    return;
+                }
+                setBackupStatus("Requesting manual backup from editor…");
+                try {
+                    frame.contentWindow.postMessage({ type: "manual-backup-request" }, "*");
+                } catch (e) {
+                    alert("Failed to talk to editor: " + e);
+                }
+            }
+
+            function restoreBackupFile(path) {
+                if (!path) return;
+                var cfg = loadFlowConfig();
+                if (!cfg.flowPath) {
+                    alert("No flow file configured.");
+                    return;
+                }
+                if (!confirm("Restore this backup?\n\n" + path + "\n\nThis will overwrite the current flow file.")) {
+                    return;
+                }
+                var contents = window.cep.fs.readFile(path);
+                if (contents.err !== 0) {
+                    alert("Could not read backup file.");
+                    return;
+                }
+                var writeResult = window.cep.fs.writeFile(cfg.flowPath, contents.data);
+                if (writeResult.err !== 0) {
+                    alert("Failed to overwrite flow file.");
+                    return;
+                }
+                setBackupStatus("Backup restored. Reloading editor…");
+                var frame = document.getElementById("showflowFrame");
+                if (frame && frame.contentWindow) {
+                    frame.contentWindow.postMessage({ type: "reload-from-disk" }, "*");
+                }
+                alert("Backup restored successfully.");
+            }
+
             function configPath() {
                 var csInterface = new CSInterface();
                 var osVersion = csInterface.getOSInformation();
@@ -521,6 +854,7 @@
                 mediaPathEl.text(parsed.mediaDir || "[not set]");
                 renderPresetEl.text(parsed.renderPreset || "[not set]");
                 renderOutputEl.text(parsed.renderOutput || "[not set]");
+                updateBackupMeta(parsed.flowPath || "");
                 currentFlowName = baseName(parsed.flowPath || "") || "";
                 window.refreshFlowMatchState();
                 return parsed;
@@ -617,10 +951,33 @@
                 window.location.href = "refresh.html?ts=" + bust;
             });
 
+            var showflowFrame = document.getElementById("showflowFrame");
+            if (showflowFrame) {
+                showflowFrame.addEventListener("load", function () {
+                    try {
+                        showflowFrame.contentWindow.postMessage({ type: "request-flow-context" }, "*");
+                    } catch (e) { }
+                });
+            }
+
             // Start on Showflow tab by default
             activateTab("showflow");
             // Sync active sequence when panel regains focus (helps when user switches sequences in PPro)
             window.addEventListener("focus", refreshSequenceInfo);
+
+            window.addEventListener("message", function (event) {
+                var data = event.data || {};
+                if (data.type === "backup-created") {
+                    var timeMsg = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : "just now";
+                    setBackupStatus((data.mode === "manual" ? "Manual" : "Auto") + " backup saved at " + timeMsg);
+                    refreshBackupList();
+                } else if (data.type === "flow-context") {
+                    updateBackupMeta(data.path || "", data.backupFolder || "");
+                    if ($("#tab-backups").hasClass("active")) {
+                        refreshBackupList();
+                    }
+                }
+            });
         });
     </script>
 </head>
@@ -632,6 +989,7 @@
         </div>
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="showflow">Showflow Editor</button>
+            <button class="tab-btn" data-tab="backups">Backups</button>
             <button class="tab-btn" data-tab="settings">Folder Setting</button>
             <button class="tab-btn" data-tab="scripts">Scripts</button>
             <button class="tab-btn pill-btn" id="refreshShowflow">Refresh Panel</button>
@@ -648,6 +1006,24 @@
         <div class="tab-panel active" id="tab-showflow">
             <div class="panel-card">
                 <iframe id="showflowFrame" src="showflow_viz.html" title="Showflow Visual Editor"></iframe>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="tab-backups">
+            <div class="panel-card backup-card">
+                <h2>Backup Center</h2>
+                <p class="muted">Automatic backups run quietly; visit this page when you want to inspect or restore history.</p>
+                <div class="backup-meta">
+                    <div>Active flow: <span id="backup-flow-path">[not set]</span></div>
+                    <div>Backup folder: <span id="backup-folder-path">[not created]</span></div>
+                </div>
+                <div class="backup-controls">
+                    <button class="pill-btn" id="backup-refresh">Refresh List</button>
+                    <button class="pill-btn" id="backup-open-folder">Open Folder</button>
+                    <button class="pill-btn primary" id="backup-manual">Manual Backup (ask editor)</button>
+                </div>
+                <div class="backup-status" id="backup-status">Waiting for editor…</div>
+                <div class="backup-list" id="backup-list-panel"></div>
             </div>
         </div>
 
