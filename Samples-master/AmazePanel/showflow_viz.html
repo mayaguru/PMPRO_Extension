@@ -1422,27 +1422,33 @@
         function updateSlotsFromMarkers(newMarkers, data) {
             if (!data) return;
             if (!data.slots) data.slots = [];
+            if (!newMarkers || newMarkers.length === 0) {
+                data.slots.length = 0;
+                data.endFrame = 0;
+                return;
+            }
+
             var slots = data.slots;
             var minGap = 1;
-            for (var i = 0; i < newMarkers.length; i++) {
+            var targetSlots = Math.max(0, newMarkers.length - 1);
+
+            for (var i = 0; i < targetSlots; i++) {
                 if (!slots[i]) slots[i] = { time: 0, duration: 600, clips: {} };
                 slots[i].time = newMarkers[i];
-                var next = (i < newMarkers.length - 1) ? newMarkers[i + 1] : null;
-                if (next !== null) {
+                var next = newMarkers[i + 1];
+                if (typeof next === "number") {
                     slots[i].duration = Math.max(minGap, next - newMarkers[i]);
                 } else if (!slots[i].duration || isNaN(slots[i].duration) || slots[i].duration <= 0) {
                     slots[i].duration = 600;
                 }
             }
-            // If there are extra slots beyond markers, keep them after last marker
-            if (slots.length > newMarkers.length) {
-                var run = newMarkers.length > 0 ? (newMarkers[newMarkers.length - 1] + (slots[newMarkers.length - 1].duration || 600)) : 0;
-                for (var j = newMarkers.length; j < slots.length; j++) {
-                    slots[j].time = run;
-                    if (!slots[j].duration || isNaN(slots[j].duration) || slots[j].duration <= 0) slots[j].duration = 600;
-                    run += slots[j].duration;
-                }
+
+            // Trim any trailing slots beyond the number of marker segments
+            if (slots.length > targetSlots) {
+                slots.length = targetSlots;
             }
+
+            data.endFrame = newMarkers[newMarkers.length - 1];
         }
 
         // Effective clip duration for display/layout (prefer trimmed range, then slot length, then clip duration)

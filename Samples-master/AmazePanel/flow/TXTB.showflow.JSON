@@ -17,13 +17,15 @@
         "C": "TXTBClip100BranchC",
         "D": "TXTBClip100BranchD",
         "E": "TXTBClip100BranchE"
-      }
+      },
+      "name": "TXTBClip100BranchA"
     },
     {
       "time": 115,
       "clips": {
         "A": "TXTBClip120"
-      }
+      },
+      "name": "TXTBClip120"
     },
     {
       "time": 1116,
@@ -33,31 +35,36 @@
         "C": "TXTBClip130branch2C",
         "D": "TXTBClip130branch2D",
         "E": "TXTBClip130branch2E"
-      }
+      },
+      "name": "TXTBClip130branch2A"
     },
     {
       "time": 1264,
       "clips": {
         "A": "TXTBClip140"
-      }
+      },
+      "name": "TXTBClip140"
     },
     {
       "time": 2082,
       "clips": {
         "A": "TXTBClip150"
-      }
+      },
+      "name": "TXTBClip150"
     },
     {
       "time": 2264,
       "clips": {
         "A": "TXTBClip160"
-      }
+      },
+      "name": "TXTBClip160"
     },
     {
       "time": 2576,
       "clips": {
         "A": "TXTBClip170"
-      }
+      },
+      "name": "TXTBClip170"
     },
     {
       "time": 3596,
@@ -67,14 +74,16 @@
         "C": "TXTBClip180branch3C",
         "D": "TXTBClip180branch3D",
         "E": "TXTBClip180branch3E"
-      }
+      },
+      "name": "TXTBClip180branch3A"
     },
     {
-      "time": 3683,
+      "time": 3984,
       "clips": {
         "A": "TXTBClip190"
-      }
+      },
+      "name": "END"
     }
   ],
-  "endFrame": 7000
+  "endFrame": 4663
 }
