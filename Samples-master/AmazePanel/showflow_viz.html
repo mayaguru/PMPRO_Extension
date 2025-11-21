@@ -781,6 +781,26 @@
             color: #aaa;
         }
 
+        .selection-marquee {
+            position: fixed;
+            border: 1px dashed rgba(255, 155, 66, 0.8);
+            background: rgba(255, 155, 66, 0.1);
+            pointer-events: none;
+            z-index: 3000;
+        }
+
+        .cursor-selecting {
+            cursor: crosshair !important;
+        }
+
+        .cursor-add {
+            cursor: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyNCcgaGVpZ2h0PScyNCc+PHJlY3QgeD0nMTEnIHk9JzQnIHdpZHRoPScyJyBoZWlnaHQ9JzE2JyBmaWxsPSclMjNmZjliNDInLz48cmVjdCB4PSc0JyB5PScxMScgd2lkdGg9JzE2JyBoZWlnaHQ9JzInIGZpbGw9JyUyM2ZmOWI0MicvPjwvc3ZnPg==") 12 12, crosshair !important;
+        }
+
+        .cursor-subtract {
+            cursor: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyNCcgaGVpZ2h0PScyNCc+PHJlY3QgeD0nNCcgeT0nMTEnIHdpZHRoPScxNicgaGVpZ2h0PScyJyBmaWxsPSclMjNmZjNiMzAnLz48L3N2Zz4=") 12 12, crosshair !important;
+        }
+
         /* Modal */
         #edit-modal {
             display: none;
@@ -970,6 +990,8 @@
         var redoStack = [];
         var maxHistorySize = 50;
         var historyEnabled = true;
+        var marqueeEl = null;
+        var marqueeState = null;
 
         function clipKey(sIdx, trKey) {
             return sIdx + "__" + trKey;
@@ -1190,6 +1212,143 @@
             lastSelectedKey = null;
             refreshSelectionStyles();
             updateRenderSelectedButton();
+        }
+
+        function ensureMarqueeElement() {
+            if (marqueeEl) return marqueeEl;
+            marqueeEl = document.createElement("div");
+            marqueeEl.id = "selection-marquee";
+            marqueeEl.className = "selection-marquee";
+            marqueeEl.style.display = "none";
+            document.body.appendChild(marqueeEl);
+            return marqueeEl;
+        }
+
+        function containerAllowsMarquee(e) {
+            var target = e ? e.target : null;
+            var hasModifier = e && (e.shiftKey || e.ctrlKey || e.metaKey);
+            if (!target) return true;
+            if (target.closest(".delete-btn")) return false;
+            if (target.closest(".insert-row-btn")) return false;
+            if (target.closest(".marker-pin") || target.closest(".marker-label")) return false;
+            if (target.closest(".timeline-ruler") || target.closest(".timeline-marker-bar")) return false;
+            if (target.closest(".clip-card") || target.closest(".timeline-clip")) {
+                return hasModifier;
+            }
+            return true;
+        }
+
+        function startMarqueeSelection(e) {
+            if (e.button !== 0) return;
+            if (!containerAllowsMarquee(e)) return;
+            e.preventDefault();
+            ensureMarqueeElement();
+            var mode = e.ctrlKey || e.metaKey ? "subtract" : (e.shiftKey ? "add" : "replace");
+            marqueeState = {
+                originX: e.clientX,
+                originY: e.clientY,
+                mode: mode,
+                baseSelection: Object.assign({}, selectedClips || {}),
+                active: false
+            };
+            document.addEventListener("mousemove", onMarqueeMove);
+            document.addEventListener("mouseup", endMarqueeSelection);
+            applyMarqueeCursor(mode);
+        }
+
+        function applyMarqueeCursor(mode) {
+            var body = document.body;
+            body.classList.remove("cursor-add", "cursor-subtract", "cursor-selecting");
+            if (mode === "subtract") {
+                body.classList.add("cursor-subtract");
+            } else if (mode === "add") {
+                body.classList.add("cursor-add");
+            } else {
+                body.classList.add("cursor-selecting");
+            }
+        }
+
+        function clearMarqueeCursor() {
+            document.body.classList.remove("cursor-add", "cursor-subtract", "cursor-selecting");
+        }
+
+        function onMarqueeMove(e) {
+            if (!marqueeState) return;
+            var dx = e.clientX - marqueeState.originX;
+            var dy = e.clientY - marqueeState.originY;
+            if (!marqueeState.active && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+            marqueeState.active = true;
+            var left = Math.min(e.clientX, marqueeState.originX);
+            var top = Math.min(e.clientY, marqueeState.originY);
+            var width = Math.abs(dx);
+            var height = Math.abs(dy);
+            marqueeEl.style.display = "block";
+            marqueeEl.style.left = left + "px";
+            marqueeEl.style.top = top + "px";
+            marqueeEl.style.width = width + "px";
+            marqueeEl.style.height = height + "px";
+
+            var rect = { left: left, top: top, right: left + width, bottom: top + height };
+            updateMarqueeSelection(rect);
+        }
+
+        function updateMarqueeSelection(rect) {
+            if (!marqueeState) return;
+            var hits = collectClipKeysInRect(rect);
+            var nextSelection;
+            if (marqueeState.mode === "add" || marqueeState.mode === "subtract") {
+                nextSelection = Object.assign({}, marqueeState.baseSelection);
+            } else {
+                nextSelection = {};
+            }
+            if (marqueeState.mode === "subtract") {
+                hits.forEach(function (key) {
+                    if (nextSelection[key]) delete nextSelection[key];
+                });
+                if (hits.length > 0) {
+                    lastSelectedKey = null;
+                }
+            } else {
+                hits.forEach(function (key) {
+                    if (key) nextSelection[key] = true;
+                });
+                if (hits.length > 0) {
+                    lastSelectedKey = hits[hits.length - 1];
+                }
+            }
+            selectedClips = nextSelection;
+            refreshSelectionStyles();
+            updateRenderSelectedButton();
+        }
+
+        function collectClipKeysInRect(rect) {
+            var clips = Array.prototype.slice.call(document.querySelectorAll(".clip-card[data-clip-key], .timeline-clip[data-clip-key]"));
+            var hits = [];
+            clips.forEach(function (el) {
+                var key = el.getAttribute("data-clip-key");
+                if (!key) return;
+                var bounds = el.getBoundingClientRect();
+                if (rectIntersect(rect, bounds)) {
+                    hits.push(key);
+                }
+            });
+            return hits;
+        }
+
+        function rectIntersect(a, b) {
+            return !(b.left > a.right || b.right < a.left || b.top > a.bottom || b.bottom < a.top);
+        }
+
+        function endMarqueeSelection() {
+            document.removeEventListener("mousemove", onMarqueeMove);
+            document.removeEventListener("mouseup", endMarqueeSelection);
+            if (marqueeEl) {
+                marqueeEl.style.display = "none";
+                marqueeEl.style.width = "0px";
+                marqueeEl.style.height = "0px";
+            }
+            clearMarqueeCursor();
+            marqueeState = null;
         }
 
         function updateRenderSelectedButton() {
@@ -2949,6 +3108,7 @@
             var container = document.getElementById("main-container");
 
             if (container) {
+                container.addEventListener("mousedown", startMarqueeSelection);
                 container.addEventListener("dblclick", function (e) {
                     if (e.target.closest(".clip-card") ||
                         e.target.closest(".timeline-clip") ||
