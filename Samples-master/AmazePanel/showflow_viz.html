@@ -100,25 +100,46 @@
             gap: 8px;
             font-size: 12px;
             color: #ddd;
+            flex-wrap: wrap;
         }
 
         #current-filename {
             font-weight: bold;
         }
 
+        .save-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            min-width: 170px;
+        }
+
+        .save-button .save-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         #save-indicator {
-            color: #4CAF50;
-            font-size: 14px;
-            transition: color 0.2s ease, opacity 0.2s ease;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4CAF50;
+            box-shadow: 0 0 6px rgba(76, 175, 80, 0.6);
+            display: inline-block;
+            transition: background 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
         }
 
         #save-indicator.unsaved {
-            color: #ff9800;
+            background: #ff9800;
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.65);
             animation: pulse 1.5s ease-in-out infinite;
         }
 
         #save-text {
-            font-size: 12px;
+            font-size: 11px;
+            color: #ddd;
         }
 
         #last-backup {
@@ -948,8 +969,6 @@
             <div class="status-row">
                 <div id="file-status">
                     <span id="current-filename">No file loaded</span>
-                    <span id="save-indicator">●</span>
-                    <span id="save-text">Saved</span>
                     <span id="last-backup"></span>
                 </div>
                 <label class="backup-frequency">Backup every:
@@ -976,7 +995,13 @@
                     <button onclick="addTrack()">Add Track</button>
                     <button onclick="openMarkerList()">Edit Markers</button>
                     <button onclick="loadData()">Reload</button>
-                    <button class="primary" onclick="saveData()">Save Changes</button>
+                    <button class="primary save-button" onclick="saveData()" id="save-button">
+                        <span class="save-button-label">Save Changes</span>
+                        <span class="save-status">
+                            <span id="save-indicator"></span>
+                            <span id="save-text">Saved</span>
+                        </span>
+                    </button>
                 </div>
             </div>
         </div>

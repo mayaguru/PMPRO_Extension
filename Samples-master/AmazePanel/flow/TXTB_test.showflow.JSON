@@ -13,10 +13,10 @@
       "time": 0,
       "clips": {
         "A": "TXTBClip100BranchA",
-        "B": "TXTBClip100BranchB",
         "C": "TXTBClip100BranchC",
         "D": "TXTBClip100BranchD",
-        "E": "TXTBClip100BranchE"
+        "E": "TXTBClip100BranchE",
+        "B": "TXTBClip100BranchB"
       },
       "name": "TXTBClip100BranchA"
     },
