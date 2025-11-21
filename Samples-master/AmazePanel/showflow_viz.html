@@ -971,6 +971,13 @@
             return start + 600;
         }
 
+        function getSlotBounds(data, sIdx) {
+            var markers = collectMarkers(data);
+            var start = markers[sIdx] !== undefined ? markers[sIdx] : getSlotStartFrame(data, sIdx);
+            var end = markers[sIdx + 1] !== undefined ? markers[sIdx + 1] : getSlotEndFrame(data, sIdx);
+            return { start: start, end: end };
+        }
+
         function computeEndFrame(data) {
             if (!data || !data.slots || data.slots.length === 0) {
                 data.endFrame = 0;
@@ -1023,12 +1030,11 @@
                 var slot = currentData.slots[sIdx];
                 if (!slot || !slot.clips || !slot.clips[trKey]) return;
                 var clip = slot.clips[trKey];
-                var start = getSlotStartFrame(currentData, sIdx);
-                var end = start;
+                var bounds = getSlotBounds(currentData, sIdx);
+                var start = bounds.start;
+                var end = bounds.end;
                 if (clip && typeof clip === "object" && clip.out !== undefined && clip.in !== undefined) {
                     end = start + (Number(clip.out) - Number(clip.in));
-                } else {
-                    end = getSlotEndFrame(currentData, sIdx);
                 }
                 if (end <= start) end = start + 1;
                 out.push({
@@ -1182,17 +1188,17 @@
 
         function setInOutFromClip(sIdx, trKey) {
             if (!currentData || !currentData.slots || !currentData.slots[sIdx]) return;
+            computeEndFrame(currentData);
             var slot = currentData.slots[sIdx];
             var clipData = slot.clips ? slot.clips[trKey] : null;
             if (!clipData) return;
 
             var clipName = (clipData && clipData.name) ? clipData.name : clipData;
-            var startFrame = getSlotStartFrame(currentData, sIdx);
-            var endFrame = startFrame;
+            var bounds = getSlotBounds(currentData, sIdx);
+            var startFrame = bounds.start;
+            var endFrame = bounds.end;
             if (clipData && typeof clipData === "object" && clipData.out !== undefined && clipData.in !== undefined) {
                 endFrame = startFrame + (Number(clipData.out) - Number(clipData.in));
-            } else {
-                endFrame = getSlotEndFrame(currentData, sIdx);
             }
 
             try {

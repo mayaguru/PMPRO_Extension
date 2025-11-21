@@ -6,6 +6,14 @@
 
 if (typeof ($) == 'undefined') $ = {};
 if (typeof ($._ext) == 'undefined') $._ext = {};
+if (typeof JSON === "undefined") {
+    JSON = {};
+}
+if (typeof JSON.parse !== "function") {
+    JSON.parse = function (text) {
+        return eval('(' + text + ')');
+    };
+}
 
 $._ext.setInOutFromClip = function (payloadStr) {
     try {

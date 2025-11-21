@@ -6,6 +6,32 @@
 
 if (typeof ($) == 'undefined') $ = {};
 if (typeof ($._ext) == 'undefined') $._ext = {};
+if (typeof JSON === "undefined") {
+    JSON = {};
+}
+if (typeof JSON.parse !== "function") {
+    JSON.parse = function (text) {
+        return eval('(' + text + ')');
+    };
+}
+if (typeof JSON.stringify !== "function") {
+    JSON.stringify = function (obj) {
+        var t = typeof obj;
+        if (t !== "object" || obj === null) {
+            if (t === "string") return '"' + obj + '"';
+            return String(obj);
+        }
+        var json = [], arr = (obj && obj.constructor === Array);
+        for (var n in obj) {
+            var v = obj[n];
+            t = typeof v;
+            if (t === "string") v = '"' + v + '"';
+            else if (t === "object" && v !== null) v = JSON.stringify(v);
+            json.push((arr ? "" : '"' + n + '":') + String(v));
+        }
+        return (arr ? "[" : "{") + String(json) + (arr ? "]" : "}");
+    };
+}
 
 $._ext.renderSelectedClips = function (payloadStr) {
     try {
