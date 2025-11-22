@@ -2518,6 +2518,7 @@
             showConfirm("Delete Track " + trKey + "?\nAll clips on this track will be removed.", "Delete Track").then(function (confirmed) {
                 if (!confirmed) return;
 
+                pushHistory("Delete Track " + trKey);
                 if (currentData.tracks) delete currentData.tracks[trKey];
 
                 if (currentData.slots) {
@@ -2541,6 +2542,7 @@
             while (keys.indexOf(String.fromCharCode(code)) >= 0) code++;
             var newKey = String.fromCharCode(code);
             keys.push(newKey);
+            pushHistory("Add Track " + newKey);
             currentData.tracks = rebuildTrackMap(keys);
             render(currentData);
         }
