@@ -100,11 +100,6 @@
             border-color: #c0392b;
         }
 
-        .status-chip.warning .dot {
-            background: #f5a623;
-            border-color: #d68910;
-        }
-
         #network-speed-indicator {
             position: absolute;
             bottom: 170px;
@@ -277,6 +272,22 @@
             background: #2e8bff;
             border: 2px solid rgba(255, 255, 255, 0.7);
             cursor: pointer;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        select option {
+            background: #1a1a1a;
+            color: #fff;
         }
 
         #instruction-list {
@@ -465,6 +476,18 @@
                     </div>
                     <div class="slider-group">
                         <div class="slider-label">
+                            <span>Projection</span>
+                        </div>
+                        <select id="projectionSelect">
+                            <option value="flat">Flat Screen</option>
+                            <option value="curved">Curved Screen</option>
+                            <option value="180">VR 180 (Mono)</option>
+                            <option value="180_sbs">VR 180 (Stereo SBS)</option>
+                            <option value="180_tb">VR 180 (Stereo TB)</option>
+                        </select>
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
                             <span>Screen Distance</span>
                             <span id="distanceValue">3.2m</span>
                         </div>
@@ -584,50 +607,106 @@
         frameTexture.magFilter = THREE.LinearFilter;
         frameTexture.anisotropy = 4;
 
-        let screenMesh;
+        const screenMaterial = new THREE.MeshBasicMaterial({
+            map: frameTexture,
+            side: THREE.DoubleSide,
+            toneMapped: false
+        });
+
+        const matLeft = screenMaterial.clone();
+        const matRight = screenMaterial.clone();
+
+        let screenMesh, screenMeshR;
         const screenState = {
             width: 4.0,
             height: 4.0 / (16 / 9),
             distance: 3.2,
-            curvature: 0
+            curvature: 0,
+            projection: 'flat'
         };
 
         function buildScreen() {
             if (screenMesh) {
                 scene.remove(screenMesh);
                 if (screenMesh.geometry) screenMesh.geometry.dispose();
-                if (screenMesh.material) screenMesh.material.dispose();
+            }
+            if (screenMeshR) {
+                scene.remove(screenMeshR);
+                if (screenMeshR.geometry) screenMeshR.geometry.dispose();
+                screenMeshR = null;
             }
 
-            let geometry;
-            if (screenState.curvature < 0.05) {
-                geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, 32, 1);
-            } else {
-                const segments = 96;
-                geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, segments, 1);
-                const arc = THREE.MathUtils.lerp(Math.PI / 60, Math.PI / 1.4, screenState.curvature);
-                const radius = screenState.width / arc;
-                const pos = geometry.attributes.position;
-                for (let i = 0; i < pos.count; i++) {
-                    const x = pos.getX(i);
-                    const angle = (x / screenState.width) * arc;
-                    const targetX = Math.sin(angle) * radius;
-                    const targetZ = radius - Math.cos(angle) * radius;
-                    pos.setX(i, targetX);
-                    pos.setZ(i, targetZ);
+            screenMaterial.map.repeat.set(1, 1);
+            screenMaterial.map.offset.set(0, 0);
+            matLeft.map = frameTexture;
+            matRight.map = frameTexture;
+            matLeft.map.repeat.set(1, 1);
+            matLeft.map.offset.set(0, 0);
+            matRight.map.repeat.set(1, 1);
+            matRight.map.offset.set(0, 0);
+
+            const mode = screenState.projection;
+
+            if (mode === 'flat' || mode === 'curved') {
+                let geometry;
+                if (screenState.curvature < 0.05 && mode !== 'curved') {
+                    geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, 32, 1);
+                } else {
+                    const segments = 96;
+                    geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, segments, 1);
+                    const arc = THREE.MathUtils.lerp(Math.PI / 60, Math.PI / 1.4, screenState.curvature);
+                    const radius = screenState.width / arc;
+                    const pos = geometry.attributes.position;
+                    for (let i = 0; i < pos.count; i++) {
+                        const x = pos.getX(i);
+                        const angle = (x / screenState.width) * arc;
+                        const targetX = Math.sin(angle) * radius;
+                        const targetZ = radius - Math.cos(angle) * radius;
+                        pos.setX(i, targetX);
+                        pos.setZ(i, targetZ);
+                    }
+                    pos.needsUpdate = true;
+                    geometry.computeVertexNormals();
                 }
-                pos.needsUpdate = true;
-                geometry.computeVertexNormals();
-            }
+                screenMesh = new THREE.Mesh(geometry, screenMaterial);
+                screenMesh.position.set(0, 1.6, -screenState.distance);
+                screenMesh.layers.enable(1);
+                screenMesh.layers.enable(2);
+                scene.add(screenMesh);
 
-            const material = new THREE.MeshBasicMaterial({
-                map: frameTexture,
-                side: THREE.DoubleSide,
-                toneMapped: false
-            });
-            screenMesh = new THREE.Mesh(geometry, material);
-            screenMesh.position.set(0, 1.6, -screenState.distance);
-            scene.add(screenMesh);
+            } else if (mode.startsWith('180')) {
+                const geometry = new THREE.SphereGeometry(screenState.distance, 64, 32, 0, Math.PI, 0, Math.PI);
+                geometry.scale(-1, 1, 1);
+
+                if (mode === '180') {
+                    screenMesh = new THREE.Mesh(geometry, screenMaterial);
+                    screenMesh.position.set(0, 1.6, 0);
+                    screenMesh.rotation.y = -Math.PI / 2;
+                    screenMesh.layers.enable(1);
+                    screenMesh.layers.enable(2);
+                    scene.add(screenMesh);
+                } else {
+                    const isSBS = mode === '180_sbs';
+
+                    matLeft.map.repeat.set(isSBS ? 0.5 : 1, isSBS ? 1 : 0.5);
+                    matLeft.map.offset.set(0, isSBS ? 0 : 0.5);
+
+                    screenMesh = new THREE.Mesh(geometry, matLeft);
+                    screenMesh.position.set(0, 1.6, 0);
+                    screenMesh.rotation.y = -Math.PI / 2;
+                    screenMesh.layers.set(1);
+                    scene.add(screenMesh);
+
+                    matRight.map.repeat.set(isSBS ? 0.5 : 1, isSBS ? 1 : 0.5);
+                    matRight.map.offset.set(isSBS ? 0.5 : 0, 0);
+
+                    screenMeshR = new THREE.Mesh(geometry.clone(), matRight);
+                    screenMeshR.position.set(0, 1.6, 0);
+                    screenMeshR.rotation.y = -Math.PI / 2;
+                    screenMeshR.layers.set(2);
+                    scene.add(screenMeshR);
+                }
+            }
         }
 
         buildScreen();
@@ -743,6 +822,7 @@
         }
 
         async function fetchFrameLoop() {
+            let errorCount = 0;
             while (state.streaming && state.useFrameEndpoint) {
                 const start = performance.now();
                 try {
@@ -761,7 +841,17 @@
                     statusMessage.textContent = "스트림 연결됨. VR 버튼을 눌러 감상하세요.";
                     setServerStatus("Server online", true);
                     updateNetworkIndicator(blob.size, performance.now() - start);
+                    errorCount = 0;
                 } catch (err) {
+                    errorCount++;
+                    console.warn(`Frame fetch error ${errorCount}:`, err);
+                    if (errorCount > 5) {
+                        console.warn("Too many errors, falling back to MJPEG stream.");
+                        statusMessage.textContent = "연결 불안정. 백업 스트림으로 전환합니다.";
+                        startMjpegFallback();
+                        break;
+                    }
+
                     statusMessage.textContent = `프레임 수신 실패: ${err.message}`;
                     setServerStatus("Server offline", false);
                     await new Promise(r => setTimeout(r, 1000));
@@ -796,8 +886,6 @@
                 }
             }
 
-            // MJPEG streams never fire a load event because the request stays open.
-            // Start pumping immediately and rely on naturalWidth checks to skip blank frames.
             pump();
         }
 
@@ -879,6 +967,11 @@
         document.getElementById('curvatureSlider').addEventListener('input', (e) => {
             screenState.curvature = parseInt(e.target.value, 10) / 100;
             document.getElementById('curvatureValue').textContent = `${e.target.value}%`;
+            buildScreen();
+        });
+
+        document.getElementById('projectionSelect').addEventListener('change', (e) => {
+            screenState.projection = e.target.value;
             buildScreen();
         });
 

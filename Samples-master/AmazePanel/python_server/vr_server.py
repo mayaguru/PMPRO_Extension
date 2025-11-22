@@ -32,15 +32,53 @@ LATEST_FRAME_BYTES = None
 LATEST_BBOX = None
 CAPTURE_THREAD_STARTED = False
 
+MONITORS_CACHE = []
+MONITORS_CACHE_LOCK = threading.Lock()
+
+
+def update_monitors_cache(sct):
+    """Update the global monitors cache from an MSS instance."""
+    global MONITORS_CACHE
+    summary = []
+    for idx, mon in enumerate(sct.monitors):
+        summary.append(
+            {
+                "index": idx,
+                "top": mon.get("top", 0),
+                "left": mon.get("left", 0),
+                "width": mon.get("width", 0),
+                "height": mon.get("height", 0),
+            }
+        )
+    with MONITORS_CACHE_LOCK:
+        MONITORS_CACHE = summary
+
+
+def get_monitors_summary():
+    """Get monitors summary from cache or fallback to direct query."""
+    with MONITORS_CACHE_LOCK:
+        if MONITORS_CACHE:
+            return copy.deepcopy(MONITORS_CACHE)
+    
+    # Fallback if cache is empty
+    return monitors_summary_direct()
+
 
 def background_capture_loop():
     """Background thread to capture screen continuously."""
     global LATEST_FRAME_BYTES, LATEST_BBOX
     print("Background capture loop started.")
     with mss.mss() as sct:
+        update_monitors_cache(sct)  # Initial cache update
+        frame_count = 0
         while True:
             cfg = clone_config()
             try:
+                # Update monitor cache occasionally (e.g., every 300 frames ~ 10s)
+                frame_count += 1
+                if frame_count % 300 == 0:
+                     update_monitors_cache(sct)
+
                 frame_bytes, bbox = encode_frame_bytes(sct, cfg)
                 if frame_bytes:
                     with FRAME_CONDITION:
@@ -101,7 +139,8 @@ def local_ip():
     return ip
 
 
-def monitors_summary():
+def monitors_summary_direct():
+    """Directly query monitors using a new MSS instance (fallback)."""
     with mss.mss() as sct:
         summary = []
         for idx, mon in enumerate(sct.monitors):
@@ -276,7 +315,7 @@ def update_config():
             "status": "success" if success else "error",
             "message": message,
             "config": cfg,
-            "monitors": monitors_summary(),
+            "monitors": get_monitors_summary(),
         },
         status,
     )
@@ -290,7 +329,7 @@ def current_config():
     return {
         "status": "ok",
         "config": clone_config(),
-        "monitors": monitors_summary(),
+        "monitors": get_monitors_summary(),
     }
 
 
@@ -299,11 +338,11 @@ def health():
     """Simple health endpoint used by the CEP panel to check connectivity."""
     if request.method == "OPTIONS":
         return ("", 204)
-    summary = monitors_summary()
+    
+    summary = get_monitors_summary()
     cfg = clone_config()
-    bbox = None
-    with mss.mss() as sct:
-        bbox = build_bbox(cfg, sct.monitors)
+    bbox = build_bbox(cfg, summary)
+    
     return {
         "status": "ok",
         "config": cfg,
