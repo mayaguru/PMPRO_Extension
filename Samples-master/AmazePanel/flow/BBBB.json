@@ -1,0 +1,18 @@
+{
+  "showId": "showflow_1763780918536",
+  "fps": 60,
+  "tracks": {
+    "A": 0,
+    "B": 1,
+    "C": 2,
+    "D": 3,
+    "E": 4
+  },
+  "slots": [
+    {
+      "time": 0,
+      "clips": {}
+    }
+  ],
+  "endFrame": 600
+}

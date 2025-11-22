@@ -86,6 +86,30 @@
             display: none;
         }
 
+        #btn-layout {
+            width: 130px;
+            justify-content: center;
+        }
+
+        .primary-action {
+            background: linear-gradient(135deg, #344a77 0%, #2a3552 100%);
+            border-color: #4b68a4;
+            color: #e9f1ff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+
+        .primary-action:hover:enabled {
+            background: linear-gradient(135deg, #3f5994 0%, #2f3f6a 100%);
+            border-color: #5d7bc4;
+        }
+
+        .primary-action:disabled {
+            background: #3a3a3a;
+            border-color: #2b2b2b;
+            color: #777;
+            box-shadow: none;
+        }
+
         .save-button {
             display: inline-flex;
             align-items: center;
@@ -358,8 +382,9 @@
 
         .marker-delete {
             position: absolute;
-            top: -8px;
-            right: -8px;
+            top: -32px;
+            left: 50%;
+            transform: translate(-50%, 0);
             width: 16px;
             height: 16px;
             background: #ff4444;
@@ -371,10 +396,15 @@
             text-align: center;
             cursor: pointer;
             display: none;
-            z-index: 100;
+            z-index: 120;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
         }
 
-        .marker-pin:hover .marker-delete {
+        .edit-mode .marker-delete {
+            display: block;
+        }
+
+        body:not(.edit-mode) .marker-pin:hover .marker-delete {
             display: block;
         }
 
@@ -873,7 +903,8 @@
         }
 
         /* Modal */
-        #edit-modal {
+        #edit-modal,
+        #new-flow-modal {
             display: none;
             position: fixed;
             top: 0;
@@ -899,6 +930,17 @@
             margin-top: 0;
             font-size: 16px;
             color: #eee;
+        }
+
+        #new-flow-modal .modal-content {
+            width: 360px;
+        }
+
+        #new-flow-modal .modal-content p {
+            font-size: 13px;
+            color: #ccc;
+            line-height: 1.4;
+            margin: 12px 0 18px;
         }
 
         .form-group {
@@ -942,12 +984,12 @@
             </div>
             <div class="control-row">
                 <div class="primary-controls">
-                    <button onclick="toggleLayout()" id="btn-layout" class="large-btn">Timeline View</button>
-                    <button onclick="toggleEditMode()" id="btn-edit-mode" class="large-btn">Edit Mode</button>
-                    <button onclick="undo()" id="btn-undo" class="large-btn" disabled>⟲ Undo</button>
-                    <button onclick="redo()" id="btn-redo" class="large-btn" disabled>⟳ Redo</button>
-                    <button onclick="selectAllClips()" class="large-btn">Select All</button>
-                    <button id="render-selected-btn" onclick="renderSelectedClips()" class="large-btn" disabled>Render Selected</button>
+                    <button onclick="toggleLayout()" id="btn-layout" class="large-btn primary-action">🕒 Timeline</button>
+                    <button onclick="toggleEditMode()" id="btn-edit-mode" class="large-btn primary-action">Edit Mode</button>
+                    <button onclick="undo()" id="btn-undo" class="large-btn primary-action" disabled>⟲ Undo</button>
+                    <button onclick="redo()" id="btn-redo" class="large-btn primary-action" disabled>⟳ Redo</button>
+                    <button onclick="selectAllClips()" class="large-btn primary-action" id="btn-select-all">Select All</button>
+                    <button id="render-selected-btn" onclick="renderSelectedClips()" class="large-btn primary-action" disabled>Render Selected</button>
                 </div>
                 <div class="secondary-controls">
                     <button onclick="newFlowFromTemplate()">New Flow</button>
@@ -1019,6 +1061,18 @@
             <div class="modal-actions">
                 <button onclick="closeModal()">Cancel</button>
                 <button class="primary" onclick="applyEdit()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Flow Warning Modal -->
+    <div id="new-flow-modal">
+        <div class="modal-content">
+            <h2>Start A New Flow?</h2>
+            <p>Your current work will be lost unless you save it first. After confirming, you will be asked where to save the new flow file.</p>
+            <div class="modal-actions">
+                <button onclick="closeNewFlowModal(false)">Keep Working</button>
+                <button class="primary" onclick="closeNewFlowModal(true)">Create New Flow</button>
             </div>
         </div>
     </div>
@@ -2033,7 +2087,7 @@
             var path = pickSavePath(suggestedName);
             if (!path) {
                 alert("No path chosen. Flow not saved.");
-                return;
+                return false;
             }
             if (!/\.json$/i.test(path)) path += ".json";
 
@@ -2051,12 +2105,37 @@
                 var label = document.getElementById("last-backup");
                 if (label) label.textContent = "";
                 startAutoBackup();
+                return true;
             } else {
                 alert("Error saving file: " + res.err);
+                return false;
             }
         }
 
         function newFlowFromTemplate() {
+            var modal = document.getElementById("new-flow-modal");
+            if (modal) {
+                modal.style.display = "flex";
+            } else {
+                // Fallback if modal was removed for some reason
+                var warning = "Create a brand new flow?\n\nUnsaved changes in the current flow will be lost.";
+                if (confirm(warning)) {
+                    applyNewFlowTemplate();
+                }
+            }
+        }
+
+        function closeNewFlowModal(confirmed) {
+            var modal = document.getElementById("new-flow-modal");
+            if (modal) {
+                modal.style.display = "none";
+            }
+            if (confirmed) {
+                applyNewFlowTemplate();
+            }
+        }
+
+        function applyNewFlowTemplate() {
             // Clone template so edits do not mutate the base
             var fresh = JSON.parse(JSON.stringify(defaultFlowTemplate));
             fresh.showId = "showflow_" + Date.now();
@@ -2075,8 +2154,17 @@
             var label = document.getElementById("last-backup");
             if (label) label.textContent = "";
             render(currentData);
-            // Immediately prompt for a save location so config picks up the new file
-            saveFlowAs(fresh.showId + ".showflow.json");
+            forceSaveForFreshFlow(fresh.showId);
+        }
+
+        function forceSaveForFreshFlow(baseName) {
+            var suggested = (baseName || ("showflow_" + Date.now())) + ".showflow.json";
+            setTimeout(function () {
+                var saved = saveFlowAs(suggested);
+                if (!saved) {
+                    alert("New flow is unsaved. Please use Save or Save As to store it before continuing.");
+                }
+            }, 0);
         }
 
         function toggleLayout() {
@@ -2085,11 +2173,11 @@
             var zoomControl = document.getElementById("zoom-control");
 
             if (isHorizontal) {
-                btn.textContent = "Tree View";
+                btn.textContent = "🌳 Tree View";
                 zoomControl.style.display = "flex";
                 document.getElementById("width-control").style.display = "none";
             } else {
-                btn.textContent = "Timeline View";
+                btn.textContent = "🕒 Timeline";
                 zoomControl.style.display = "none";
                 document.getElementById("width-control").style.display = "flex";
             }

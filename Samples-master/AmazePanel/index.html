@@ -2213,7 +2213,17 @@
                     setBackupStatus((data.mode === "manual" ? "Manual" : "Auto") + " backup saved at " + timeMsg);
                     refreshBackupList();
                 } else if (data.type === "flow-context") {
-                    updateBackupMeta(data.path || "", data.backupFolder || "");
+                    var reportedPath = data.path || "";
+                    if (reportedPath) {
+                        currentFlowPath = reportedPath;
+                        currentFlowName = baseName(reportedPath) || "";
+                    } else {
+                        currentFlowPath = "";
+                        currentFlowName = "";
+                    }
+                    flowPathEl.text(reportedPath || "[not set]");
+                    updateBackupMeta(reportedPath, data.backupFolder || "");
+                    window.refreshFlowMatchState();
                     if ($("#tab-backups").hasClass("active")) {
                         refreshBackupList();
                     }
