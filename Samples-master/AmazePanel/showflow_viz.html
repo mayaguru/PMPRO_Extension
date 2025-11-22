@@ -265,6 +265,16 @@
             align-items: center;
         }
 
+        .tool-status {
+            font-size: 11px;
+            color: #8fb3ff;
+            margin-left: 12px;
+        }
+
+        .tool-status.error {
+            color: #ff6b6b;
+        }
+
         /* Hide playhead controls while keeping DOM/logic intact */
         .tool-group.playhead-group {
             display: none;
@@ -1023,6 +1033,7 @@
             <button onclick="syncPlayheadFromSeq()">Sync From Seq</button>
             <button onclick="pushPlayheadToSeq()">Push To Seq</button>
         </div>
+        <span id="marker-status" class="tool-status"></span>
     </div>
 
     <div id="main-container">
@@ -1100,6 +1111,9 @@
         var timelineScale = 1;
         var markerWarnings = {};
         var markerDrag = null;
+        var markerStatusTimer = null;
+        var JSX_JSON_HELPERS = "" +
+            "function __jsonParse(str){ if(typeof JSON!=='undefined' && JSON.parse){ return JSON.parse(str); } return eval('(' + str + ')'); }\n";
         var rulerDrag = null;
         var playheadFrame = 0;
         var playheadPxPerFrame = 1;
@@ -1204,6 +1218,27 @@
                     window.parent.postMessage(message, "*");
                 }
             } catch (e) { }
+        }
+
+        function setMarkerStatus(message, isError) {
+            var el = document.getElementById("marker-status");
+            if (!el) return;
+            if (markerStatusTimer) {
+                clearTimeout(markerStatusTimer);
+                markerStatusTimer = null;
+            }
+            if (!message) {
+                el.textContent = "";
+                el.classList.remove("error");
+                return;
+            }
+            el.textContent = message;
+            if (isError) el.classList.add("error");
+            else el.classList.remove("error");
+            markerStatusTimer = setTimeout(function () {
+                el.textContent = "";
+                el.classList.remove("error");
+            }, 4000);
         }
 
         function announceFlowContext() {
@@ -1312,23 +1347,23 @@
                 "  }\n" +
                 "  return folder.create();\n" +
                 "};\n" +
-                "if (!ensure(holder)) { return JSON.stringify({error:'Cannot create backup folders'}); }\n" +
+                "if (!ensure(holder)) { return 'ERROR|Cannot create backup folders'; }\n" +
                 "var sep = holder.fsName.indexOf('/') >= 0 ? '/' : '\\\\';\n" +
                 "var target = new File(holder.fsName + sep + decodeURIComponent('" + encodeURIComponent(backupFileName) + "'));\n" +
                 "target.encoding = 'UTF-8';\n" +
-                "if(!target.open('w')){return JSON.stringify({error:'Error opening backup file'});}\n" +
+                "if(!target.open('w')){return 'ERROR|Error opening backup file';}\n" +
                 "target.write(decodeURIComponent('" + encodeURIComponent(jsonStr) + "'));\n" +
                 "target.close();\n" +
-                "return JSON.stringify({status:'ok', path: target.fsName});\n" +
+                "return 'OK|' + encodeURIComponent(target.fsName);\n" +
                 "})();";
             csInterface.evalScript(jsx, function (res) {
-                var result;
-                try {
-                    result = JSON.parse(res || "{}");
-                } catch (e) {
-                    result = { error: res };
+                if (!res) {
+                    alert("Backup failed: no response.");
+                    return;
                 }
-                if (result && result.status === 'ok') {
+                if (res.indexOf("OK|") === 0) {
+                    var savedPath = "";
+                    try { savedPath = decodeURIComponent(res.substring(3)); } catch (e) { savedPath = res.substring(3); }
                     lastBackupHash = currentHash;
                     var label = document.getElementById("last-backup");
                     var displayTime = formatTimestampClock(now);
@@ -1339,11 +1374,13 @@
                         type: "backup-created",
                         mode: force ? "manual" : "auto",
                         timestamp: now.getTime(),
-                        path: result.path || ""
+                        path: savedPath || ""
                     });
-                    console.log("Backup saved: " + (result.path || backupFileName));
+                    console.log("Backup saved: " + (savedPath || backupFileName));
                 } else {
-                    console.error("Backup failed:", result && result.error ? result.error : res);
+                    var msg = res.indexOf("ERROR|") === 0 ? res.substring(6) : res;
+                    console.error("Backup failed:", msg);
+                    alert(msg || "Backup failed.");
                 }
             });
         }
@@ -3248,7 +3285,7 @@
 
         function syncPlayheadFromSeq() {
             var jsx = "(function(){\n" +
-                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}" +
+                "if(!app.project || !app.project.activeSequence){return 'ERROR|No active sequence';}" +
                 "var seq=app.project.activeSequence;\n" +
                 "var fps=60;\n" +
                 "try{if(seq.videoFrameRate&&seq.videoFrameRate.seconds){var f=1/Number(seq.videoFrameRate.seconds);if(f>0)fps=Math.round(f);}}catch(e){}\n" +
@@ -3256,16 +3293,14 @@
                 "var ticks = (t && t.ticks) ? Number(t.ticks) : 0;\n" +
                 "var TICKS_PER_SECOND = 254016000000;\n" +
                 "var frame = Math.round((ticks / TICKS_PER_SECOND) * fps);\n" +
-                "return JSON.stringify({frame:frame});\n" +
+                "return 'OK|' + frame;\n" +
                 "})();";
             csInterface.evalScript(jsx, function (res) {
-                try {
-                    var obj = JSON.parse(res || "{}");
-                    if (obj.error) { return; }
-                    // If we recently pushed a local change, skip one poll to avoid bouncing back
-                    if (Date.now() - playheadLocalStamp < 500) return;
-                    setPlayheadFrame(obj.frame || 0, false);
-                } catch (e) { }
+                if (!res || res.indexOf("OK|") !== 0) return;
+                // If we recently pushed a local change, skip one poll to avoid bouncing back
+                if (Date.now() - playheadLocalStamp < 500) return;
+                var frameVal = Number(res.substring(3)) || 0;
+                setPlayheadFrame(frameVal, false);
             });
         }
 
@@ -3339,7 +3374,7 @@
 
         function pullMarkersFromSequence() {
             var jsx = "(function(){\n" +
-                "if(!app.project || !app.project.activeSequence){return JSON.stringify({error:'No active sequence'});}" +
+                "if(!app.project || !app.project.activeSequence){return 'ERROR|No active sequence';}" +
                 "var seq = app.project.activeSequence;\n" +
                 "var fps = 60;\n" +
                 "try{ if(seq.videoFrameRate && seq.videoFrameRate.seconds){ var f=1/Number(seq.videoFrameRate.seconds); if(f>0) fps=Math.round(f);} }catch(e){}\n" +
@@ -3359,18 +3394,55 @@
                 "  }\n" +
                 "}\n" +
                 "out.sort(function(a,b){return a.frame-b.frame;});\n" +
-                "return JSON.stringify({fps:fps, markers:out});\n" +
+                "var parts=['OK', String(fps)];\n" +
+                "for(var i=0;i<out.length;i++){\n" +
+                "  var mk = out[i];\n" +
+                "  var nm = encodeURIComponent(mk.name || '');\n" +
+                "  parts.push((mk.frame||0) + ':' + nm);\n" +
+                "}\n" +
+                "return parts.join('|');\n" +
                 "})();";
 
             csInterface.evalScript(jsx, function (res) {
+                if (!res) {
+                    setMarkerStatus("Failed to import markers: no response.", true);
+                    alert("Failed to import markers: no response.");
+                    return;
+                }
+                if (res.indexOf("ERROR|") === 0) {
+                    var errMsg = res.substring(6) || "Failed to import markers.";
+                    setMarkerStatus(errMsg, true);
+                    alert(errMsg);
+                    return;
+                }
+                var parts = res.split("|");
+                if (parts[0] !== "OK") {
+                    setMarkerStatus("Failed to import markers.", true);
+                    alert("Failed to import markers: " + res);
+                    return;
+                }
+                var fpsVal = Number(parts[1]) || 60;
+                var markers = [];
+                for (var i = 2; i < parts.length; i++) {
+                    var seg = parts[i];
+                    if (!seg) continue;
+                    var idx = seg.indexOf(":");
+                    if (idx === -1) continue;
+                    var frameNum = Number(seg.substring(0, idx)) || 0;
+                    var rawName = seg.substring(idx + 1);
+                    var decodedName = "";
+                    try { decodedName = decodeURIComponent(rawName); } catch (err) { decodedName = rawName; }
+                    markers.push({ frame: frameNum, name: decodedName });
+                }
                 try {
-                    var obj = JSON.parse(res || "{}");
-                    if (obj.error) { alert(obj.error); return; }
-                    var markers = obj.markers || [];
-                    if (markers.length === 0) { alert("No markers found in active sequence."); return; }
+                    if (markers.length === 0) {
+                        setMarkerStatus("No markers found in active sequence.", true);
+                        alert("No markers found in active sequence.");
+                        return;
+                    }
                     if (!currentData) currentData = {};
                     var oldSlots = (currentData.slots || []).slice();
-                    currentData.fps = obj.fps || 60;
+                    currentData.fps = fpsVal || 60;
                     if (!currentData.tracks || Object.keys(currentData.tracks).length === 0) {
                         currentData.tracks = { "A": 0 };
                     }
@@ -3422,8 +3494,9 @@
                     }
                     currentData.slots = newSlots;
                     render(currentData);
-                    alert("Imported " + markers.length + " markers from sequence.");
+                    setMarkerStatus("Imported " + markers.length + " marker(s) from sequence.", false);
                 } catch (e) {
+                    setMarkerStatus("Failed to import markers.", true);
                     alert("Failed to import markers: " + e);
                 }
             });
@@ -3457,8 +3530,8 @@
                 payload.push({ frame: m, name: name || ("Marker " + (idx + 1)) });
             });
 
-            var jsx = "(function(){\n" +
-                "var data = JSON.parse(decodeURIComponent('" + encodeURIComponent(JSON.stringify({ mode: mode, fps: fps, markers: payload })) + "'));\n" +
+            var jsx = "(function(){\n" + JSX_JSON_HELPERS +
+                "var data = __jsonParse(decodeURIComponent('" + encodeURIComponent(JSON.stringify({ mode: mode, fps: fps, markers: payload })) + "'));\n" +
                 "if(!app.project || !app.project.activeSequence){return 'No active sequence';}\n" +
                 "var seq = app.project.activeSequence;\n" +
                 "var fps = data.fps || 60;\n" +
@@ -3476,8 +3549,9 @@
 
             csInterface.evalScript(jsx, function (res) {
                 if (res === 'ok') {
-                    alert('Markers pushed to active sequence (' + mode + ').');
+                    setMarkerStatus('Markers pushed to sequence (' + mode + ').', false);
                 } else {
+                    setMarkerStatus('Marker push failed.', true);
                     alert('Marker push result: ' + res);
                 }
             });
