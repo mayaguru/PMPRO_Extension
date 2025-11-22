@@ -52,6 +52,48 @@
             flex-direction: column;
         }
 
+        .confirm-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 5000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirm-modal .modal-content {
+            background: #2d2d2d;
+            border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 360px;
+            width: 90%;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+        }
+
+        .confirm-modal h2 {
+            margin: 0 0 10px;
+            font-size: 16px;
+            color: #f0f0f0;
+        }
+
+        .confirm-modal p {
+            font-size: 13px;
+            color: #ccc;
+            line-height: 1.5;
+            margin: 0 0 18px;
+        }
+
+        .confirm-modal .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
         #header {
             display: flex;
             flex-wrap: wrap;
@@ -1986,7 +2028,7 @@
                 loadFlowConfig(); // refresh display
             }
 
-            function openFlowFilePicker() {
+            function launchFlowFilePickerDialog() {
                 var csInterface = new CSInterface();
                 var startFolder = csInterface.getSystemPath(SystemPath.EXTENSION);
                 var dlg = window.cep.fs.showOpenDialog(false, false, "Select showflow JSON", startFolder, ["json"]);
@@ -2000,17 +2042,27 @@
                     if (selectedPath && existingPath && selectedPath === existingPath) {
                         return;
                     }
-                    if (selectedPath && existingPath) {
-                        var confirmMessage = "경고: 지금 열려 있는 Flow(" + baseName(existingPath) + ")가 닫히고\n" +
-                            "새 Flow(" + baseName(selectedPath) + ")를 엽니다.\n\n" +
-                            "취소하려면 Cancel을 누르세요.\n" +
-                            "작업을 저장했고 새로운 파일을 열고 싶으면 OK를 눌러주세요.";
-                        if (!confirm(confirmMessage)) {
-                            return;
-                        }
-                    }
                     current.flowPath = selectedPath;
                     saveFlowConfig(current);
+                }
+            }
+
+            function openFlowFilePicker() {
+                var modal = document.getElementById("flow-pick-modal");
+                if (modal) {
+                    modal.style.display = "flex";
+                } else {
+                    launchFlowFilePickerDialog();
+                }
+            }
+
+            function closeFlowPickModal(confirmed) {
+                var modal = document.getElementById("flow-pick-modal");
+                if (modal) {
+                    modal.style.display = "none";
+                }
+                if (confirmed) {
+                    launchFlowFilePickerDialog();
                 }
             }
 
@@ -2021,6 +2073,8 @@
 
             $("#pickFlow").on("click", handlePickFlowClick);
             $("#pickFlowStatusBtn").on("click", handlePickFlowClick);
+            $("#flowPickCancel").on("click", function () { closeFlowPickModal(false); });
+            $("#flowPickConfirm").on("click", function () { closeFlowPickModal(true); });
 
             $("#clearFlow").on("click", function (e) {
                 e.preventDefault();
@@ -2558,6 +2612,17 @@
             </div>
         </div>
     </div>
+    </div>
+
+    <div id="flow-pick-modal" class="confirm-modal">
+        <div class="modal-content">
+            <h2>Load A Flow File?</h2>
+            <p>Picking a different Flow JSON will replace the current selection and reload the Showflow view. Make sure any open work is saved before continuing.</p>
+            <div class="modal-actions">
+                <button class="controlBg textStyle" id="flowPickCancel">Keep Current Flow</button>
+                <button class="controlBg textStyle" id="flowPickConfirm">Pick Flow JSON</button>
+            </div>
+        </div>
     </div>
 </body>
 
