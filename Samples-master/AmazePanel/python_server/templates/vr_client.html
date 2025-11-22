@@ -279,6 +279,71 @@
             cursor: pointer;
         }
 
+        .stereo-control-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .stereo-toggle-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .stereo-toggle-btn {
+            flex: 1 1 120px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
+            font-size: 13px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .stereo-toggle-btn.active {
+            background: linear-gradient(135deg, #b138f5, #7a1eb8);
+            border-color: rgba(255, 255, 255, 0.45);
+        }
+
+        .stereo-toggle-btn.cannon-active {
+            background: linear-gradient(135deg, #ff8a50, #ff5722);
+            border-color: rgba(255, 255, 255, 0.45);
+        }
+
+        .eye-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .eye-btn-group {
+            display: inline-flex;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .eye-btn-group button {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 12px;
+            padding: 6px 14px;
+            cursor: pointer;
+        }
+
+        .eye-btn-group button.active {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
         #instruction-list {
             font-size: 13px;
             line-height: 1.6;
@@ -519,6 +584,26 @@
                     <h3>Telemetry</h3>
                     <div id="log">Ready.</div>
                 </div>
+                <div class="panel-card">
+                    <h3>VR Stereo</h3>
+                    <div class="stereo-control-grid">
+                        <div class="stereo-toggle-group">
+                            <button class="stereo-toggle-btn active" id="toggleStereoBtn">Stereo ON</button>
+                            <button class="stereo-toggle-btn" id="toggleDeconvexBtn">DeConvex OFF</button>
+                            <button class="stereo-toggle-btn" id="toggleCannonBtn">Cannon OFF</button>
+                        </div>
+                        <div class="eye-toggle-row">
+                            <span>Desktop Eye</span>
+                            <div class="eye-btn-group">
+                                <button id="eyeLeftBtn" class="active">Left</button>
+                                <button id="eyeRightBtn">Right</button>
+                            </div>
+                        </div>
+                        <p style="font-size:12px;color:rgba(255,255,255,0.65);">
+                            DeConvex / Cannon 옵션으로 SBS 렌즈 왜곡을 교정할 수 있습니다.
+                        </p>
+                    </div>
+                </div>
             </div>
             <button id="controlCollapseBtn" class="control-toggle-btn" aria-expanded="true">Hide Controls</button>
             <button id="controlCompactBtn" class="control-toggle-btn" aria-pressed="false">Compact Layout</button>
@@ -529,6 +614,13 @@
         import * as THREE from '/static/vendor/three/three.module.js';
         import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
         import { VRButton } from '/static/vendor/three/VRButton.js';
+        import * as DeconvexShader from '/static/js/deconvex-shader.js';
+        import * as CombinedLensShader from '/static/js/combined-lens-shader.js';
+        import * as HVMapLoader from '/static/js/hvmap-loader.js';
+
+        window.DeconvexShader = DeconvexShader;
+        window.CombinedLensShader = CombinedLensShader;
+        window.HVMapLoader = HVMapLoader;
 
         const canvas = document.getElementById('vrCanvas');
         const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -555,6 +647,7 @@
         controls.target.set(0, 1.6, 0);
         controls.enableDamping = true;
         controls.enablePan = false;
+        controls.enableZoom = false;
 
         const ambient = new THREE.AmbientLight(0xffffff, 0.45);
         const keyLight = new THREE.SpotLight(0x89c4ff, 1.1, 20, Math.PI / 4, 0.25, 1);
@@ -584,7 +677,8 @@
         frameTexture.magFilter = THREE.LinearFilter;
         frameTexture.anisotropy = 4;
 
-        let screenMesh;
+        let screenMesh = null;
+        let stereoMeshes = { left: null, right: null, web: null };
         const screenState = {
             width: 4.0,
             height: 4.0 / (16 / 9),
@@ -592,13 +686,49 @@
             curvature: 0
         };
 
-        function buildScreen() {
-            if (screenMesh) {
-                scene.remove(screenMesh);
-                if (screenMesh.geometry) screenMesh.geometry.dispose();
-                if (screenMesh.material) screenMesh.material.dispose();
-            }
+        const stereoState = {
+            isStereoMode: true,
+            deconvexEnabled: false,
+            cannonEnabled: false,
+            stereoEyeOffset: 0.0,
+            cannonMaps: null,
+            cannonLoading: false
+        };
+        const stereoEls = {};
 
+        function disposeMesh(mesh) {
+            if (!mesh) return;
+            if (mesh.material) {
+                if (Array.isArray(mesh.material)) {
+                    mesh.material.forEach(mat => mat.dispose && mat.dispose());
+                } else {
+                    mesh.material.dispose && mesh.material.dispose();
+                }
+            }
+            if (mesh.geometry) {
+                mesh.geometry.dispose && mesh.geometry.dispose();
+            }
+            scene.remove(mesh);
+        }
+
+        function clearScreenMeshes() {
+            if (screenMesh) {
+                disposeMesh(screenMesh);
+                screenMesh = null;
+            }
+            if (stereoMeshes.left) {
+                disposeMesh(stereoMeshes.left);
+            }
+            if (stereoMeshes.right) {
+                disposeMesh(stereoMeshes.right);
+            }
+            if (stereoMeshes.web) {
+                disposeMesh(stereoMeshes.web);
+            }
+            stereoMeshes = { left: null, right: null, web: null };
+        }
+
+        function createPlaneScreen() {
             let geometry;
             if (screenState.curvature < 0.05) {
                 geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, 32, 1);
@@ -630,7 +760,253 @@
             scene.add(screenMesh);
         }
 
-        buildScreen();
+        function createHemisphereGeometry() {
+            const radius = 100;
+            return new THREE.SphereGeometry(
+                radius,
+                64,
+                32,
+                -Math.PI / 2,
+                Math.PI,
+                0,
+                Math.PI
+            );
+        }
+
+        function createStereoMaterial(mode) {
+            const width = frameCanvas.width || 7680;
+            const height = frameCanvas.height || 3840;
+            let material = null;
+
+            if (stereoState.cannonEnabled && stereoState.cannonMaps && CombinedLensShader?.createCombinedLensShaderMaterial) {
+                material = CombinedLensShader.createCombinedLensShaderMaterial(frameTexture, stereoState.cannonMaps, {
+                    srcWidth: width,
+                    srcHeight: height,
+                    outWidth: width,
+                    outHeight: height,
+                    enableDeconvex: stereoState.deconvexEnabled,
+                    enableCannon: stereoState.cannonEnabled,
+                    eyeMode: mode,
+                    swapEyes: true
+                });
+            } else if (stereoState.deconvexEnabled && DeconvexShader?.createDeconvexShaderMaterial) {
+                material = DeconvexShader.createDeconvexShaderMaterial(frameTexture, {
+                    srcWidth: width,
+                    srcHeight: height,
+                    outWidth: width,
+                    outHeight: height,
+                    enableDeconvex: stereoState.deconvexEnabled,
+                    eyeMode: mode
+                });
+            } else {
+                const modeValue = mode === 'left' ? 0.0 : mode === 'right' ? 1.0 : 2.0;
+                material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        map: { value: frameTexture },
+                        eyeMode: { value: modeValue },
+                        eyeOffset: { value: stereoState.stereoEyeOffset }
+                    },
+                    vertexShader: `
+                        varying vec2 vUv;
+                        void main() {
+                            vUv = uv;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform sampler2D map;
+                        uniform float eyeMode;
+                        uniform float eyeOffset;
+                        varying vec2 vUv;
+
+                        vec4 sampleEye(bool leftEye) {
+                            vec2 uv = leftEye
+                                ? vec2(0.5 - vUv.x * 0.5, vUv.y)
+                                : vec2(1.0 - vUv.x * 0.5, vUv.y);
+                            return texture2D(map, uv);
+                        }
+
+                        void main() {
+                            if (eyeMode < 0.5) {
+                                gl_FragColor = sampleEye(true);
+                            } else if (eyeMode < 1.5) {
+                                gl_FragColor = sampleEye(false);
+                            } else {
+                                bool showLeft = eyeOffset < 0.25;
+                                gl_FragColor = sampleEye(showLeft);
+                            }
+                        }
+                    `
+                });
+            }
+
+            if (mode === 'hemisphere' && material.uniforms && material.uniforms.eyeOffset) {
+                material.uniforms.eyeOffset.value = stereoState.stereoEyeOffset;
+            }
+            material.side = THREE.BackSide;
+            material.toneMapped = false;
+            return material;
+        }
+
+        function createWebStereoMesh() {
+            const geometry = createHemisphereGeometry();
+            const material = createStereoMaterial('hemisphere');
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.rotation.y = -Math.PI / 2;
+            mesh.layers.set(0);
+            stereoMeshes.web = mesh;
+            scene.add(mesh);
+        }
+
+        function createVrStereoMeshes() {
+            const leftMesh = new THREE.Mesh(createHemisphereGeometry(), createStereoMaterial('left'));
+            leftMesh.rotation.y = -Math.PI / 2;
+            leftMesh.layers.set(1);
+
+            const rightMesh = new THREE.Mesh(createHemisphereGeometry(), createStereoMaterial('right'));
+            rightMesh.rotation.y = -Math.PI / 2;
+            rightMesh.layers.set(2);
+
+            stereoMeshes.left = leftMesh;
+            stereoMeshes.right = rightMesh;
+            scene.add(leftMesh);
+            scene.add(rightMesh);
+            camera.layers.enable(1);
+            camera.layers.enable(2);
+            updateXrCameraLayers();
+        }
+
+        function updateXrCameraLayers() {
+            if (!renderer.xr.isPresenting || !stereoState.isStereoMode) {
+                camera.layers.set(0);
+                return;
+            }
+
+            camera.layers.enable(1);
+            camera.layers.enable(2);
+
+            try {
+                const xrCamera = renderer.xr.getCamera(camera);
+                if (xrCamera && xrCamera.isArrayCamera && xrCamera.cameras) {
+                    const [leftEye, rightEye] = xrCamera.cameras;
+                    if (leftEye && leftEye.layers) {
+                        leftEye.layers.set(1);
+                    }
+                    if (rightEye && rightEye.layers) {
+                        rightEye.layers.set(2);
+                    }
+                }
+            } catch (err) {
+                console.warn('XR camera layer update failed:', err.message);
+            }
+        }
+
+        function rebuildScreen() {
+            clearScreenMeshes();
+            if (stereoState.isStereoMode) {
+                if (renderer.xr.isPresenting) {
+                    createVrStereoMeshes();
+                } else {
+                    createWebStereoMesh();
+                }
+            } else {
+                createPlaneScreen();
+            }
+            updateXrCameraLayers();
+        }
+
+        rebuildScreen();
+
+        async function ensureCannonMaps() {
+            if (stereoState.cannonMaps) {
+                return stereoState.cannonMaps;
+            }
+            if (stereoState.cannonLoading) {
+                while (stereoState.cannonLoading && !stereoState.cannonMaps) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                return stereoState.cannonMaps;
+            }
+            if (!HVMapLoader || !HVMapLoader.loadHVMapLR) {
+                return null;
+            }
+            stereoState.cannonLoading = true;
+            updateStereoButtons();
+            try {
+                stereoState.cannonMaps = await HVMapLoader.loadHVMapLR(
+                    '/static/presets/Cannon_L.hvmap',
+                    '/static/presets/Cannon_R.hvmap'
+                );
+                log('Cannon lens presets loaded');
+            } catch (err) {
+                console.error('Failed to load Cannon lens presets:', err);
+                log('Failed to load Cannon lens presets');
+                stereoState.cannonMaps = null;
+            } finally {
+                stereoState.cannonLoading = false;
+                updateStereoButtons();
+            }
+            return stereoState.cannonMaps;
+        }
+
+        function updateStereoButtons() {
+            if (stereoEls.stereoBtn) {
+                stereoEls.stereoBtn.classList.toggle('active', stereoState.isStereoMode);
+                stereoEls.stereoBtn.textContent = stereoState.isStereoMode ? 'Stereo ON' : 'Stereo OFF';
+            }
+            if (stereoEls.deconvexBtn) {
+                stereoEls.deconvexBtn.classList.toggle('active', stereoState.deconvexEnabled);
+                stereoEls.deconvexBtn.textContent = stereoState.deconvexEnabled ? 'DeConvex ON' : 'DeConvex OFF';
+            }
+            if (stereoEls.cannonBtn) {
+                const enabled = stereoState.cannonEnabled;
+                stereoEls.cannonBtn.classList.toggle('active', enabled);
+                stereoEls.cannonBtn.classList.toggle('cannon-active', enabled);
+                stereoEls.cannonBtn.textContent = enabled ? 'Cannon ON' : 'Cannon OFF';
+                stereoEls.cannonBtn.disabled = stereoState.cannonLoading;
+            }
+            if (stereoEls.eyeLeftBtn && stereoEls.eyeRightBtn) {
+                stereoEls.eyeLeftBtn.classList.toggle('active', stereoState.stereoEyeOffset < 0.25);
+                stereoEls.eyeRightBtn.classList.toggle('active', stereoState.stereoEyeOffset >= 0.25);
+            }
+        }
+
+        function setEyeOffset(offset) {
+            stereoState.stereoEyeOffset = offset;
+            if (stereoMeshes.web && stereoMeshes.web.material && stereoMeshes.web.material.uniforms && stereoMeshes.web.material.uniforms.eyeOffset) {
+                stereoMeshes.web.material.uniforms.eyeOffset.value = offset;
+            }
+            updateStereoButtons();
+        }
+
+        function toggleStereoMode() {
+            stereoState.isStereoMode = !stereoState.isStereoMode;
+            controls.enablePan = !stereoState.isStereoMode;
+            controls.enableZoom = !stereoState.isStereoMode;
+            updateStereoButtons();
+            rebuildScreen();
+        }
+
+        function toggleDeconvex() {
+            stereoState.deconvexEnabled = !stereoState.deconvexEnabled;
+            updateStereoButtons();
+            rebuildScreen();
+        }
+
+        async function toggleCannon() {
+            if (!stereoState.cannonEnabled) {
+                const maps = await ensureCannonMaps();
+                if (!maps) {
+                    alert('Cannon 렌즈 프리셋을 불러올 수 없습니다.');
+                    return;
+                }
+                stereoState.cannonEnabled = true;
+            } else {
+                stereoState.cannonEnabled = false;
+            }
+            updateStereoButtons();
+            rebuildScreen();
+        }
 
         function resizeRenderer() {
             const width = window.innerWidth;
@@ -682,6 +1058,14 @@
         let controlsCollapsed = false;
         let controlsCompact = window.innerWidth < 1500;
         let compactManualOverride = false;
+
+        stereoEls.stereoBtn = document.getElementById('toggleStereoBtn');
+        stereoEls.deconvexBtn = document.getElementById('toggleDeconvexBtn');
+        stereoEls.cannonBtn = document.getElementById('toggleCannonBtn');
+        stereoEls.eyeLeftBtn = document.getElementById('eyeLeftBtn');
+        stereoEls.eyeRightBtn = document.getElementById('eyeRightBtn');
+        updateStereoButtons();
+        setEyeOffset(0.0);
 
         function updateCollapseState() {
             document.body.classList.toggle('controls-collapsed', controlsCollapsed);
@@ -837,6 +1221,10 @@
                 if (data.bbox) {
                     frameCanvas.width = data.bbox.width;
                     frameCanvas.height = data.bbox.height;
+                    frameTexture.needsUpdate = true;
+                    if (stereoState.isStereoMode) {
+                        rebuildScreen();
+                    }
                 }
                 setServerStatus("Server online", true);
                 statusMessage.textContent = "Quest에서 같은 주소로 접속하세요.";
@@ -873,14 +1261,34 @@
         document.getElementById('distanceSlider').addEventListener('input', (e) => {
             screenState.distance = parseFloat(e.target.value);
             document.getElementById('distanceValue').textContent = `${screenState.distance.toFixed(1)}m`;
-            buildScreen();
+            if (!stereoState.isStereoMode) {
+                rebuildScreen();
+            }
         });
 
         document.getElementById('curvatureSlider').addEventListener('input', (e) => {
             screenState.curvature = parseInt(e.target.value, 10) / 100;
             document.getElementById('curvatureValue').textContent = `${e.target.value}%`;
-            buildScreen();
+            if (!stereoState.isStereoMode) {
+                rebuildScreen();
+            }
         });
+
+        if (stereoEls.stereoBtn) {
+            stereoEls.stereoBtn.addEventListener('click', () => toggleStereoMode());
+        }
+        if (stereoEls.deconvexBtn) {
+            stereoEls.deconvexBtn.addEventListener('click', () => toggleDeconvex());
+        }
+        if (stereoEls.cannonBtn) {
+            stereoEls.cannonBtn.addEventListener('click', () => toggleCannon());
+        }
+        if (stereoEls.eyeLeftBtn) {
+            stereoEls.eyeLeftBtn.addEventListener('click', () => setEyeOffset(0.0));
+        }
+        if (stereoEls.eyeRightBtn) {
+            stereoEls.eyeRightBtn.addEventListener('click', () => setEyeOffset(0.5));
+        }
 
         document.getElementById('toggleEnvBtn').addEventListener('click', () => {
             state.lightsOn = !state.lightsOn;
@@ -897,7 +1305,8 @@
         document.getElementById('refreshHealthBtn').addEventListener('click', refreshHealth);
 
         document.getElementById('recenterBtn').addEventListener('click', () => {
-            camera.position.set(0, 1.6, screenState.distance);
+            const targetZ = stereoState.isStereoMode ? 3.2 : screenState.distance;
+            camera.position.set(0, 1.6, targetZ);
             controls.target.set(0, 1.6, 0);
             controls.update();
             log('Camera re-centered');
@@ -928,6 +1337,8 @@
                     xrSession = null;
                     enterVrBtn.textContent = 'Enter VR';
                     log('VR 세션 종료');
+                    rebuildScreen();
+                    updateXrCameraLayers();
                 }, { once: true });
             } catch (err) {
                 log(`VR 세션 시작 실패: ${err.message}`);
@@ -946,11 +1357,15 @@
         renderer.xr.addEventListener('sessionstart', () => {
             vrModeLabel.textContent = 'VR Session Active';
             enterVrBtn.textContent = 'Exit VR';
+            rebuildScreen();
+            updateXrCameraLayers();
         });
 
         renderer.xr.addEventListener('sessionend', () => {
             vrModeLabel.textContent = 'Desktop Preview';
             enterVrBtn.textContent = 'Enter VR';
+            rebuildScreen();
+            updateXrCameraLayers();
         });
 
         document.getElementById('ui-toggle-corner-btn').addEventListener('click', () => {

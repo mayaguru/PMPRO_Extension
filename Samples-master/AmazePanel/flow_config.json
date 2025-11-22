@@ -1,5 +1,5 @@
 {
-  "flowPath": "D:\\_DEV\\PremiereScripts\\Scripts\\Samples-master\\AmazePanel\\flow\\test.showflow.json",
+  "flowPath": "D:/_DEV/PremiereScripts/Scripts/Samples-master/AmazePanel/flow/ATZ.showflow.json",
   "mediaDir": "",
   "renderOutput": "D:/_RenderOut",
   "renderPreset": "D:/_DEV/PremiereScripts/Scripts/Samples-master/AmazePanel/preset/Apple ProRes 422.epr",
@@ -17,13 +17,13 @@
     "serverUrl": "http://localhost:5000",
     "mode": "region",
     "monitorIndex": 1,
-    "fps": 13,
-    "quality": 63,
+    "fps": 30,
+    "quality": 80,
     "region": {
-      "top": 0,
-      "left": 0,
-      "width": 3440,
-      "height": 1440
+      "top": 136,
+      "left": 9,
+      "width": 1590,
+      "height": 719
     },
     "aspectLock": false
   }
