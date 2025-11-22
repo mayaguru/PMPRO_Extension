@@ -840,6 +840,61 @@
         }
     </style>
     <script type="text/javascript">
+        var panelDialogTimer = null;
+
+        function showPanelDialog(options) {
+            options = options || {};
+            var modal = document.getElementById("panel-dialog");
+            if (!modal) {
+                window.alert(options.message || "");
+                return Promise.resolve(options.defaultValue !== undefined ? options.defaultValue : true);
+            }
+            var titleEl = document.getElementById("panel-dialog-title");
+            var msgEl = document.getElementById("panel-dialog-message");
+            var actionsEl = document.getElementById("panel-dialog-actions");
+            var title = options.title || "Notice";
+            var message = options.message || "";
+            var buttons = options.buttons && options.buttons.length ? options.buttons : [{ label: "OK", value: true, primary: true }];
+
+            titleEl.textContent = title;
+            msgEl.innerHTML = message.replace(/\n/g, "<br>");
+            actionsEl.innerHTML = "";
+
+            return new Promise(function (resolve) {
+                var resolved = false;
+                function close(value) {
+                    if (resolved) return;
+                    resolved = true;
+                    modal.style.display = "none";
+                    resolve(value);
+                }
+                buttons.forEach(function (btn) {
+                    var button = document.createElement("button");
+                    button.textContent = btn.label || "OK";
+                    if (btn.primary) button.className = "primary";
+                    button.onclick = function () { close(btn.value); };
+                    actionsEl.appendChild(button);
+                });
+                modal.style.display = "flex";
+            });
+        }
+
+        function showPanelAlert(message, title) {
+            return showPanelDialog({ message: message, title: title || "Notice" });
+        }
+
+        function showPanelConfirm(message, title) {
+            return showPanelDialog({
+                message: message,
+                title: title || "Confirm",
+                buttons: [
+                    { label: "Cancel", value: false },
+                    { label: "OK", value: true, primary: true }
+                ],
+                defaultValue: false
+            });
+        }
+
         $(document).ready(function () {
             function activateTab(tab) {
                 $(".tab-btn").removeClass("active");
@@ -924,7 +979,7 @@
             // handlers, instead of directly invoking ExtendScript. This lets us pass data into the ExtendScript layer.
             function runAmazeScript(fileName) {
                 if (!fileName) {
-                    alert("실행할 스크립트가 설정되지 않았습니다.");
+                    showPanelAlert("실행할 스크립트가 설정되지 않았습니다.", "Amaze Script");
                     return;
                 }
                 var csInterface = new CSInterface();
@@ -957,7 +1012,7 @@
 
                 csInterface.evalScript(jsxCall, function (res) {
                     if (res && res.indexOf("ERR:") === 0) {
-                        alert("Script error:\n" + res);
+                        showPanelAlert("Script error:\n" + res, "Amaze Script");
                     }
                 });
             }
@@ -1018,7 +1073,7 @@
                         e.preventDefault();
                         var selected = quickScriptState[slotIndex];
                         if (!selected || !selected.path) {
-                            alert("이 슬롯에는 스크립트가 없습니다.");
+                            showPanelAlert("이 슬롯에는 스크립트가 없습니다.", "Quick Slot");
                             return;
                         }
                         runAmazeScript(selected.path);
@@ -1336,7 +1391,7 @@
 
             function openBackupFolder(path) {
                 if (!path) {
-                    alert("No backup folder available.");
+                    showPanelAlert("No backup folder available.", "Backups");
                     return;
                 }
                 var jsx = "(function(){\n" +
@@ -1347,7 +1402,7 @@
                 var csInterface = new CSInterface();
                 csInterface.evalScript(jsx, function (res) {
                     if (res !== "ok") {
-                        alert("Unable to open folder: " + res);
+                        showPanelAlert("Unable to open folder: " + res, "Backups");
                     }
                 });
             }
@@ -1355,14 +1410,14 @@
             function requestManualBackup() {
                 var frame = document.getElementById("showflowFrame");
                 if (!frame || !frame.contentWindow) {
-                    alert("Showflow editor is not available.");
+                    showPanelAlert("Showflow editor is not available.", "Backups");
                     return;
                 }
                 setBackupStatus("Requesting manual backup from editor…");
                 try {
                     frame.contentWindow.postMessage({ type: "manual-backup-request" }, "*");
                 } catch (e) {
-                    alert("Failed to talk to editor: " + e);
+                    showPanelAlert("Failed to talk to editor: " + e, "Backups");
                 }
             }
 
@@ -1370,28 +1425,28 @@
                 if (!path) return;
                 var cfg = loadFlowConfig();
                 if (!cfg.flowPath) {
-                    alert("No flow file configured.");
+                    showPanelAlert("No flow file configured.", "Restore Backup");
                     return;
                 }
-                if (!confirm("Restore this backup?\n\n" + path + "\n\nThis will overwrite the current flow file.")) {
-                    return;
-                }
-                var contents = window.cep.fs.readFile(path);
-                if (contents.err !== 0) {
-                    alert("Could not read backup file.");
-                    return;
-                }
-                var writeResult = window.cep.fs.writeFile(cfg.flowPath, contents.data);
-                if (writeResult.err !== 0) {
-                    alert("Failed to overwrite flow file.");
-                    return;
-                }
-                setBackupStatus("Backup restored. Reloading editor…");
-                var frame = document.getElementById("showflowFrame");
-                if (frame && frame.contentWindow) {
-                    frame.contentWindow.postMessage({ type: "reload-from-disk" }, "*");
-                }
-                alert("Backup restored successfully.");
+                showPanelConfirm("Restore this backup?\n\n" + path + "\n\nThis will overwrite the current flow file.", "Restore Backup").then(function (confirmed) {
+                    if (!confirmed) return;
+                    var contents = window.cep.fs.readFile(path);
+                    if (contents.err !== 0) {
+                        showPanelAlert("Could not read backup file.", "Restore Backup");
+                        return;
+                    }
+                    var writeResult = window.cep.fs.writeFile(cfg.flowPath, contents.data);
+                    if (writeResult.err !== 0) {
+                        showPanelAlert("Failed to overwrite flow file.", "Restore Backup");
+                        return;
+                    }
+                    setBackupStatus("Backup restored. Reloading editor…");
+                    var frame = document.getElementById("showflowFrame");
+                    if (frame && frame.contentWindow) {
+                        frame.contentWindow.postMessage({ type: "reload-from-disk" }, "*");
+                    }
+                    showPanelAlert("Backup restored successfully.", "Restore Backup");
+                });
             }
 
             function configPath() {
@@ -1949,7 +2004,7 @@
             function sendVrConfigToServer() {
                 var endpoint = buildVrEndpoint("/update_config");
                 if (!endpoint) {
-                    alert("Set the VR server URL first.");
+                    showPanelAlert("Set the VR server URL first.", "VR Server");
                     return;
                 }
                 if (vrEls.configStatus) {
@@ -2185,7 +2240,7 @@
                 var csInterface = new CSInterface();
                 csInterface.evalScript("$._PPP_.getActiveSequenceFrameSize()", function (res) {
                     if (!res || res.indexOf("|") === -1) {
-                        alert("Unable to read sequence dimensions.");
+                        showPanelAlert("Unable to read sequence dimensions.", "VR Server");
                         return;
                     }
                     var parts = res.split("|");
@@ -2202,7 +2257,7 @@
                 e.preventDefault();
                 var url = sanitizeVrUrl(currentVrConfig.serverUrl);
                 if (!url) {
-                    alert("Set the server URL first.");
+                    showPanelAlert("Set the server URL first.", "VR Server");
                     return;
                 }
                 window.cep.util.openURLInDefaultBrowser(url);
@@ -2612,6 +2667,14 @@
             </div>
         </div>
     </div>
+    </div>
+
+    <div id="panel-dialog" class="confirm-modal">
+        <div class="modal-content">
+            <h2 id="panel-dialog-title">Notice</h2>
+            <p id="panel-dialog-message"></p>
+            <div class="modal-actions" id="panel-dialog-actions"></div>
+        </div>
     </div>
 
     <div id="flow-pick-modal" class="confirm-modal">

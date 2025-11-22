@@ -927,6 +927,19 @@
             align-items: center;
         }
 
+        .app-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
         .modal-content {
             background: #2d2d2d;
             padding: 20px;
@@ -1058,7 +1071,7 @@
     </div>
 
     <!-- Edit Modal -->
-    <div id="edit-modal">
+    <div id="edit-modal" class="app-modal">
         <div class="modal-content">
             <h2>Edit Clip</h2>
             <div class="form-group">
@@ -1077,7 +1090,7 @@
     </div>
 
     <!-- New Flow Warning Modal -->
-    <div id="new-flow-modal">
+    <div id="new-flow-modal" class="app-modal">
         <div class="modal-content">
             <h2>Start A New Flow?</h2>
             <p>Your current work will be lost unless you save it first. After confirming, you will be asked where to save the new flow file.</p>
@@ -1089,7 +1102,7 @@
     </div>
 
     <!-- Marker Edit Modal -->
-    <div id="marker-modal" style="display:none;">
+    <div id="marker-modal" class="app-modal" style="display:none;">
         <div class="modal-content" style="max-width:680px; width:680px;">
             <h2>Edit Markers</h2>
             <div id="marker-list" style="max-height:360px; overflow:auto; margin:-8px 0 12px 0; padding-right:4px;">
@@ -1098,6 +1111,15 @@
                 <button onclick="closeMarkerModal()">Cancel</button>
                 <button class="primary" onclick="applyMarkerEdits()">Apply</button>
             </div>
+        </div>
+    </div>
+
+    <!-- General Dialog Modal -->
+    <div id="dialog-modal" class="app-modal">
+        <div class="modal-content" style="width:360px;">
+            <h2 id="dialog-title">Notice</h2>
+            <div id="dialog-message" style="font-size:13px; color:#ccc; line-height:1.4; margin:12px 0 18px;"></div>
+            <div class="modal-actions" id="dialog-actions"></div>
         </div>
     </div>
 
@@ -1218,6 +1240,61 @@
                     window.parent.postMessage(message, "*");
                 }
             } catch (e) { }
+        }
+
+        function showDialog(options) {
+            options = options || {};
+            var modal = document.getElementById("dialog-modal");
+            if (!modal) {
+                window.alert(options.message || "");
+                return Promise.resolve(options.defaultValue !== undefined ? options.defaultValue : true);
+            }
+            var titleEl = document.getElementById("dialog-title");
+            var msgEl = document.getElementById("dialog-message");
+            var actionsEl = document.getElementById("dialog-actions");
+            var title = options.title || "Notification";
+            var message = options.message || "";
+            var buttons = options.buttons && options.buttons.length ? options.buttons : [{ label: "OK", value: true, variant: "primary" }];
+
+            titleEl.textContent = title;
+            msgEl.innerHTML = (message || "").replace(/\n/g, "<br>");
+            actionsEl.innerHTML = "";
+
+            return new Promise(function (resolve) {
+                var resolved = false;
+                function close(value) {
+                    if (resolved) return;
+                    resolved = true;
+                    modal.style.display = "none";
+                    resolve(value);
+                }
+                buttons.forEach(function (btn) {
+                    var button = document.createElement("button");
+                    button.textContent = btn.label || "OK";
+                    if (btn.variant === "primary") {
+                        button.className = "primary";
+                    }
+                    button.onclick = function () { close(btn.value); };
+                    actionsEl.appendChild(button);
+                });
+                modal.style.display = "flex";
+            });
+        }
+
+        function showAlert(message, title) {
+            return showDialog({ message: message, title: title || "Notice" });
+        }
+
+        function showConfirm(message, title) {
+            return showDialog({
+                message: message,
+                title: title || "Confirm",
+                buttons: [
+                    { label: "Cancel", value: false },
+                    { label: "OK", value: true, variant: "primary" }
+                ],
+                defaultValue: false
+            });
         }
 
         function setMarkerStatus(message, isError) {
@@ -1358,7 +1435,7 @@
                 "})();";
             csInterface.evalScript(jsx, function (res) {
                 if (!res) {
-                    alert("Backup failed: no response.");
+                    showAlert("Backup failed: no response.");
                     return;
                 }
                 if (res.indexOf("OK|") === 0) {
@@ -1380,7 +1457,7 @@
                 } else {
                     var msg = res.indexOf("ERROR|") === 0 ? res.substring(6) : res;
                     console.error("Backup failed:", msg);
-                    alert(msg || "Backup failed.");
+                    showAlert(msg || "Backup failed.");
                 }
             });
         }
@@ -1774,16 +1851,16 @@
         function renderSelectedClips() {
             var clips = collectSelectedClips();
             if (!clips.length) {
-                alert("No clips selected. Select clips in tree/timeline first.");
+                showAlert("No clips selected. Select clips in tree/timeline first.", "Render Selected");
                 return;
             }
             var cfg = readFlowConfig();
             if (!cfg || !cfg.renderPreset) {
-                alert("Render preset not set. Configure it in the panel first.");
+                showAlert("Render preset not set. Configure it in the panel first.", "Render Selected");
                 return;
             }
-            if (!cfg.renderOutput) {
-                alert("Render output folder not set.");
+            if (!cfg || !cfg.renderOutput) {
+                showAlert("Render output folder not set.", "Render Selected");
                 return;
             }
             try {
@@ -1797,13 +1874,13 @@
                 var evalStr = '$.evalFile("' + scriptPath + '"); $._ext.renderSelectedClips("' + payload + '");';
                 csInterface.evalScript(evalStr, function (res) {
                     if (res && res.indexOf("ERR:") === 0) {
-                        alert("Error: " + res.replace("ERR:", "").trim());
+                        showAlert("Error: " + res.replace("ERR:", "").trim(), "Render Selected");
                     } else {
-                        alert(res || "RenderRequest completed.");
+                        showAlert(res || "Render request completed.", "Render Selected");
                     }
                 });
             } catch (err) {
-                alert("Failed to queue render: " + err);
+                showAlert("Failed to queue render: " + err, "Render Selected");
             }
         }
 
@@ -2068,7 +2145,7 @@
         function loadData() {
             var cfg = readFlowConfig();
             if (!cfg.flowPath) {
-                alert("No Flow Path set in config.");
+                showAlert("No Flow Path set in config.", "Load Flow");
                 updateFilenameDisplay();
                 currentFilePath = null;
                 announceFlowContext();
@@ -2081,7 +2158,7 @@
 
             var flowRes = window.cep.fs.readFile(currentFilePath);
             if (flowRes.err !== 0) {
-                alert("Could not read Showflow JSON at: " + currentFilePath);
+                showAlert("Could not read Showflow JSON at: " + currentFilePath, "Load Flow");
                 return;
             }
 
@@ -2097,7 +2174,7 @@
                 announceFlowContext();
                 startAutoBackup();
             } catch (e) {
-                alert("Error parsing JSON: " + e);
+                showAlert("Error parsing JSON: " + e, "Load Flow");
             }
         }
 
@@ -2113,7 +2190,7 @@
                 lastBackupHash = originalDataHash;
                 updateSaveStatus(true);
             } else {
-                alert("Error saving file: " + res.err);
+                showAlert("Error saving file: " + res.err, "Save");
             }
         }
 
@@ -2123,7 +2200,7 @@
             normalizeData(normalized);
             var path = pickSavePath(suggestedName);
             if (!path) {
-                alert("No path chosen. Flow not saved.");
+                showAlert("No path chosen. Flow not saved.", "Save As");
                 return false;
             }
             if (!/\.json$/i.test(path)) path += ".json";
@@ -2144,7 +2221,7 @@
                 startAutoBackup();
                 return true;
             } else {
-                alert("Error saving file: " + res.err);
+                showAlert("Error saving file: " + res.err, "Save As");
                 return false;
             }
         }
@@ -2156,9 +2233,9 @@
             } else {
                 // Fallback if modal was removed for some reason
                 var warning = "Create a brand new flow?\n\nUnsaved changes in the current flow will be lost.";
-                if (confirm(warning)) {
-                    applyNewFlowTemplate();
-                }
+                showConfirm(warning, "New Flow").then(function (ok) {
+                    if (ok) applyNewFlowTemplate();
+                });
             }
         }
 
@@ -2199,7 +2276,7 @@
             setTimeout(function () {
                 var saved = saveFlowAs(suggested);
                 if (!saved) {
-                    alert("New flow is unsaved. Please use Save or Save As to store it before continuing.");
+                    showAlert("New flow is unsaved. Please use Save or Save As to store it before continuing.", "New Flow");
                 }
             }, 0);
         }
@@ -2435,27 +2512,26 @@
             if (!currentData) return;
             var keys = deriveTrackKeys(currentData);
             if (keys.length <= 1) {
-                alert("Cannot delete the last track.");
+                showAlert("Cannot delete the last track.", "Delete Track");
                 return;
             }
-            if (!confirm("Delete Track " + trKey + "?\nAll clips on this track will be removed.")) return;
+            showConfirm("Delete Track " + trKey + "?\nAll clips on this track will be removed.", "Delete Track").then(function (confirmed) {
+                if (!confirmed) return;
 
-            // Remove from track map
-            if (currentData.tracks) delete currentData.tracks[trKey];
+                if (currentData.tracks) delete currentData.tracks[trKey];
 
-            // Remove clips on that track
-            if (currentData.slots) {
-                currentData.slots.forEach(function (slot) {
-                    if (slot && slot.clips && slot.clips[trKey]) {
-                        delete slot.clips[trKey];
-                    }
-                });
-            }
+                if (currentData.slots) {
+                    currentData.slots.forEach(function (slot) {
+                        if (slot && slot.clips && slot.clips[trKey]) {
+                            delete slot.clips[trKey];
+                        }
+                    });
+                }
 
-            // Rebuild track map to keep indexes compact
-            var remaining = deriveTrackKeys(currentData).filter(function (k) { return k !== trKey; });
-            currentData.tracks = rebuildTrackMap(remaining);
-            render(currentData);
+                var remaining = deriveTrackKeys(currentData).filter(function (k) { return k !== trKey; });
+                currentData.tracks = rebuildTrackMap(remaining);
+                render(currentData);
+            });
         }
 
         function addTrack() {
@@ -3067,26 +3143,26 @@
             if (!currentData || !currentData.slots) return;
 
             if (markerIdx <= 0) {
-                alert("Cannot delete the first marker (start point).");
+                showAlert("Cannot delete the first marker (start point).", "Delete Marker");
                 return;
             }
 
             var markers = collectMarkers(currentData);
             if (markerIdx >= markers.length - 1) {
-                alert("Cannot delete the end marker.");
+                showAlert("Cannot delete the end marker.", "Delete Marker");
                 return;
             }
 
             var slotIdx = markerIdx - 1;
             if (slotIdx < 0 || slotIdx >= currentData.slots.length - 1) {
-                alert("Invalid marker position.");
+                showAlert("Invalid marker position.", "Delete Marker");
                 return;
             }
 
             var currentSlot = currentData.slots[slotIdx];
             var nextSlot = currentData.slots[slotIdx + 1];
             if (!currentSlot || !nextSlot) {
-                alert("Invalid marker position.");
+                showAlert("Invalid marker position.", "Delete Marker");
                 return;
             }
 
@@ -3405,20 +3481,21 @@
 
             csInterface.evalScript(jsx, function (res) {
                 if (!res) {
-                    setMarkerStatus("Failed to import markers: no response.", true);
-                    alert("Failed to import markers: no response.");
+                    var noResp = "Failed to import markers: no response.";
+                    setMarkerStatus(noResp, true);
+                    showAlert(noResp, "Import Markers");
                     return;
                 }
                 if (res.indexOf("ERROR|") === 0) {
                     var errMsg = res.substring(6) || "Failed to import markers.";
                     setMarkerStatus(errMsg, true);
-                    alert(errMsg);
+                    showAlert(errMsg, "Import Markers");
                     return;
                 }
                 var parts = res.split("|");
                 if (parts[0] !== "OK") {
                     setMarkerStatus("Failed to import markers.", true);
-                    alert("Failed to import markers: " + res);
+                    showAlert("Failed to import markers: " + res, "Import Markers");
                     return;
                 }
                 var fpsVal = Number(parts[1]) || 60;
@@ -3436,8 +3513,9 @@
                 }
                 try {
                     if (markers.length === 0) {
-                        setMarkerStatus("No markers found in active sequence.", true);
-                        alert("No markers found in active sequence.");
+                        var noneMsg = "No markers found in active sequence.";
+                        setMarkerStatus(noneMsg, true);
+                        showAlert(noneMsg, "Import Markers");
                         return;
                     }
                     if (!currentData) currentData = {};
@@ -3497,19 +3575,19 @@
                     setMarkerStatus("Imported " + markers.length + " marker(s) from sequence.", false);
                 } catch (e) {
                     setMarkerStatus("Failed to import markers.", true);
-                    alert("Failed to import markers: " + e);
+                    showAlert("Failed to import markers: " + e, "Import Markers");
                 }
             });
         }
 
         function pushMarkersToSequence(mode) {
             if (!currentData) {
-                alert("No flow loaded.");
+                showAlert("No flow loaded.", "Push Markers");
                 return;
             }
             var markers = collectMarkers(currentData);
             if (markers.length === 0) {
-                alert("No markers in current data.");
+                showAlert("No markers in current data.", "Push Markers");
                 return;
             }
             var fps = currentData.fps || 60;
@@ -3552,7 +3630,7 @@
                     setMarkerStatus('Markers pushed to sequence (' + mode + ').', false);
                 } else {
                     setMarkerStatus('Marker push failed.', true);
-                    alert('Marker push result: ' + res);
+                    showAlert('Marker push result: ' + res, "Push Markers");
                 }
             });
         }
