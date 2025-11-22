@@ -132,6 +132,10 @@
             background: #666;
         }
 
+        .status-dot.blink {
+            animation: mismatch-blink 1s steps(2, jump-none) infinite;
+        }
+
         .status-dot.match {
             background: #2ecc71;
             border-color: #1f8f55;
@@ -145,6 +149,20 @@
         .status-dot.neutral {
             background: #666;
             border-color: #444;
+        }
+
+        @keyframes mismatch-blink {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+
+            100% {
+                opacity: 1;
+            }
         }
 
         /* Emphasize the active sequence name */
@@ -177,6 +195,29 @@
             justify-content: center;
             font-size: 13px;
             border-radius: 50%;
+        }
+
+        .icon-btn.tiny {
+            width: 22px;
+            height: 22px;
+            font-size: 11px;
+        }
+
+        .status-warning {
+            display: none;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: rgba(231, 76, 60, 0.15);
+            color: #ffb1a6;
+            font-size: 11px;
+            border: 1px solid rgba(231, 76, 60, 0.4);
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-warning.visible {
+            display: inline-flex;
+            animation: mismatch-blink 1.2s steps(2, jump-none) infinite;
         }
 
         #content {
@@ -1013,7 +1054,10 @@
             var renderOutputEl = $("#renderOutputPath");
             var flowMatchEl = $("#flowMatchDot");
             var flowNameEl = $("#flow_file_name");
+            var flowWarningEl = $("#flowMismatchWarning");
             var currentFlowName = "";
+            var currentFlowPath = "";
+            var pendingFlowReload = false;
             var backupFlowLabel = $("#backup-flow-path");
             var backupFolderLabel = $("#backup-folder-path");
             var backupListEl = $("#backup-list-panel");
@@ -1033,6 +1077,20 @@
                 return str.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase();
             }
 
+            function setFlowWarning(active, message) {
+                if (!flowWarningEl || !flowWarningEl.length) return;
+                if (typeof message === "string" && message) {
+                    flowWarningEl.text(message);
+                }
+                if (active) {
+                    flowWarningEl.addClass("visible");
+                    flowWarningEl.attr("aria-hidden", "false");
+                } else {
+                    flowWarningEl.removeClass("visible");
+                    flowWarningEl.attr("aria-hidden", "true");
+                }
+            }
+
             window.refreshFlowMatchState = function () {
                 var dot = flowMatchEl.get(0);
                 var seqEl = document.getElementById("active_seq");
@@ -1042,7 +1100,8 @@
                 flowNameEl.text(currentFlowName || "[not set]");
                 flowNameEl.attr("title", backupFlowPath || "[not set]");
 
-                dot.classList.remove("match", "mismatch", "neutral");
+                dot.classList.remove("match", "mismatch", "neutral", "blink");
+                setFlowWarning(false);
 
                 if (!currentFlowName || !seqName || seqName === "[uninitialized]") {
                     dot.classList.add("neutral");
@@ -1053,7 +1112,29 @@
                 var match = prefixKey(seqName) === prefixKey(currentFlowName);
                 dot.classList.add(match ? "match" : "mismatch");
                 dot.title = match ? "Flow matches project prefix" : "Flow does not match project prefix";
+                if (match) {
+                    return;
+                }
+                dot.classList.add("blink");
+                setFlowWarning(true, "Sequence \"" + seqName + "\" and flow \"" + currentFlowName + "\" do not match.");
             };
+
+            function requestShowflowReload(reason) {
+                var frame = document.getElementById("showflowFrame");
+                var sent = false;
+                if (frame && frame.contentWindow) {
+                    try {
+                        frame.contentWindow.postMessage({
+                            type: "reload-from-disk",
+                            reason: reason || "flow-path-updated"
+                        }, "*");
+                        sent = true;
+                    } catch (err) {
+                        sent = false;
+                    }
+                }
+                pendingFlowReload = !sent;
+            }
 
             function sanitizeBackupSegment(name) {
                 var safe = (name || "flow").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
@@ -1878,12 +1959,17 @@
             }
             function loadFlowConfig() {
                 var parsed = readConfigFileRaw();
-                flowPathEl.text(parsed.flowPath || "[not set]");
+                var newFlowPath = parsed.flowPath || "";
+                flowPathEl.text(newFlowPath || "[not set]");
 
                 renderPresetEl.text(parsed.renderPreset || "[not set]");
                 renderOutputEl.text(parsed.renderOutput || "[not set]");
-                updateBackupMeta(parsed.flowPath || "");
-                currentFlowName = baseName(parsed.flowPath || "") || "";
+                updateBackupMeta(newFlowPath || "");
+                if (newFlowPath !== currentFlowPath) {
+                    currentFlowPath = newFlowPath;
+                    requestShowflowReload("flow-path-updated");
+                }
+                currentFlowName = baseName(newFlowPath || "") || "";
                 window.refreshFlowMatchState();
                 refreshQuickRunUI(parsed.quickScripts || []);
                 currentVrConfig = mergeVrConfig(parsed.vr);
@@ -1900,17 +1986,41 @@
                 loadFlowConfig(); // refresh display
             }
 
-            $("#pickFlow").on("click", function (e) {
-                e.preventDefault();
+            function openFlowFilePicker() {
                 var csInterface = new CSInterface();
                 var startFolder = csInterface.getSystemPath(SystemPath.EXTENSION);
                 var dlg = window.cep.fs.showOpenDialog(false, false, "Select showflow JSON", startFolder, ["json"]);
                 if (dlg.err === 0 && dlg.data && dlg.data.length > 0) {
                     var current = loadFlowConfig() || {};
-                    current.flowPath = dlg.data[0];
+                    var selectedPath = dlg.data[0];
+                    if (!selectedPath) {
+                        return;
+                    }
+                    var existingPath = current.flowPath || "";
+                    if (selectedPath && existingPath && selectedPath === existingPath) {
+                        return;
+                    }
+                    if (selectedPath && existingPath) {
+                        var confirmMessage = "경고: 지금 열려 있는 Flow(" + baseName(existingPath) + ")가 닫히고\n" +
+                            "새 Flow(" + baseName(selectedPath) + ")를 엽니다.\n\n" +
+                            "취소하려면 Cancel을 누르세요.\n" +
+                            "작업을 저장했고 새로운 파일을 열고 싶으면 OK를 눌러주세요.";
+                        if (!confirm(confirmMessage)) {
+                            return;
+                        }
+                    }
+                    current.flowPath = selectedPath;
                     saveFlowConfig(current);
                 }
-            });
+            }
+
+            function handlePickFlowClick(e) {
+                if (e) e.preventDefault();
+                openFlowFilePicker();
+            }
+
+            $("#pickFlow").on("click", handlePickFlowClick);
+            $("#pickFlowStatusBtn").on("click", handlePickFlowClick);
 
             $("#clearFlow").on("click", function (e) {
                 e.preventDefault();
@@ -2084,6 +2194,9 @@
                     try {
                         showflowFrame.contentWindow.postMessage({ type: "request-flow-context" }, "*");
                         showflowFrame.contentWindow.postMessage({ type: "request-backup-interval" }, "*");
+                        if (pendingFlowReload) {
+                            requestShowflowReload("frame-ready");
+                        }
                     } catch (e) { }
                 });
             }
@@ -2132,6 +2245,15 @@
                 <span id="flow_file_name">[not set]</span>
                 <span class="status-dot neutral" id="flowMatchDot" title="Waiting for sequence and flow"></span>
             </span>
+            <button class="pill-btn icon-btn tiny" id="pickFlowStatusBtn" title="Pick flow JSON" type="button"
+                aria-label="Pick flow JSON">
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <path fill="currentColor"
+                        d="M3 6c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2h-8.6L10 5H3zm0 2h5.4l1.4 1.5H21v7.5H3z" />
+                </svg>
+            </button>
+            <span class="status-warning" id="flowMismatchWarning" role="alert" aria-hidden="true">Sequence and flow do not
+                match.</span>
         </div>
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="showflow">SHOWFLOW</button>
