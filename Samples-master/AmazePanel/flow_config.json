@@ -17,13 +17,14 @@
     "serverUrl": "http://localhost:5000",
     "mode": "region",
     "monitorIndex": 1,
-    "fps": 30,
-    "quality": 80,
+    "fps": 13,
+    "quality": 63,
     "region": {
       "top": 0,
       "left": 0,
-      "width": 1280,
-      "height": 720
-    }
+      "width": 3440,
+      "height": 1440
+    },
+    "aspectLock": false
   }
 }

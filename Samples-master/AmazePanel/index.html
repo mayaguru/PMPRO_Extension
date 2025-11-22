@@ -568,15 +568,18 @@
             overflow: hidden;
             border: 1px solid #333;
             background: #000;
+            aspect-ratio: var(--vr-preview-aspect, 16 / 9);
+            min-height: 160px;
         }
 
         .vr-preview-display img,
         .vr-preview-display iframe {
             width: 100%;
-            height: 260px;
+            height: 100%;
             display: block;
             border: none;
             background: #000;
+            object-fit: fill;
         }
 
         .vr-preview-overlay {
@@ -593,11 +596,108 @@
             pointer-events: none;
         }
 
+        .vr-crop-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .vr-crop-overlay.disabled {
+            opacity: 0.15;
+        }
+
+        .vr-crop-selection {
+            position: absolute;
+            border: 2px solid rgba(79, 195, 247, 0.9);
+            background: rgba(79, 195, 247, 0.08);
+            border-radius: 4px;
+            cursor: move;
+            pointer-events: auto;
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .vr-crop-selection.hidden {
+            display: none;
+        }
+
+        .vr-crop-center-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 1px dashed rgba(255, 255, 255, 0.55);
+            pointer-events: none;
+        }
+
+        .vr-crop-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(79, 195, 247, 0.95);
+            border: 2px solid #0d1824;
+            pointer-events: auto;
+        }
+
+        .vr-crop-handle.handle-nw {
+            top: -6px;
+            left: -6px;
+            cursor: nwse-resize;
+        }
+
+        .vr-crop-handle.handle-ne {
+            top: -6px;
+            right: -6px;
+            cursor: nesw-resize;
+        }
+
+        .vr-crop-handle.handle-sw {
+            bottom: -6px;
+            left: -6px;
+            cursor: nesw-resize;
+        }
+
+        .vr-crop-handle.handle-se {
+            bottom: -6px;
+            right: -6px;
+            cursor: nwse-resize;
+        }
+
         .vr-config-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             gap: 8px;
             margin-bottom: 6px;
+        }
+
+        .vr-aspect-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .vr-aspect-row label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text);
+        }
+
+        .vr-aspect-row input[type="checkbox"] {
+            accent-color: var(--accent);
+            width: 16px;
+            height: 16px;
+        }
+
+        .vr-aspect-note {
+            font-size: 11px;
+            color: var(--muted);
+            flex: 1;
         }
 
         .vr-config-grid label {
@@ -695,7 +795,8 @@
                     left: 0,
                     width: 1280,
                     height: 720
-                }
+                },
+                aspectLock: false
             };
             var currentVrConfig = JSON.parse(JSON.stringify(defaultVrConfig));
             var vrMonitors = [];
@@ -706,6 +807,8 @@
                 statusLabel: $("#vrStatusLabel"),
                 previewImage: $("#vrPreviewImage"),
                 previewOverlay: $("#vrPreviewOverlay"),
+                cropOverlay: $("#vrCropOverlay"),
+                cropSelection: $("#vrCropSelection"),
                 frame: $("#vrFrame"),
                 frameOverlay: $("#vrFrameOverlay"),
                 serverUrl: $("#vrServerUrl"),
@@ -717,10 +820,15 @@
                 leftInput: $("#vrLeft"),
                 widthInput: $("#vrWidth"),
                 heightInput: $("#vrHeight"),
+                aspectLock: $("#vrAspectLock"),
                 configStatus: $("#vrConfigStatus"),
                 localIp: $("#vrLocalIp"),
                 instructionIp: $("#local-ip-display")
             };
+            var vrCropOverlayEl = document.getElementById("vrCropOverlay");
+            var vrCropSelectionEl = document.getElementById("vrCropSelection");
+            var cropOverlayRect = { x: 0, y: 0, width: 1, height: 1 };
+            var cropDragState = { active: false, mode: "move" };
 
             function isAbsoluteScriptPath(path) {
                 if (!path) return false;
@@ -1222,6 +1330,7 @@
                 merged.region.left = parseInt(regionSource.left, 10) >= 0 ? parseInt(regionSource.left, 10) : merged.region.left;
                 merged.region.width = parseInt(regionSource.width, 10) > 0 ? parseInt(regionSource.width, 10) : merged.region.width;
                 merged.region.height = parseInt(regionSource.height, 10) > 0 ? parseInt(regionSource.height, 10) : merged.region.height;
+                merged.aspectLock = !!raw.aspectLock;
                 return merged;
             }
 
@@ -1240,10 +1349,14 @@
                 if (vrEls.monitorSelect && vrEls.monitorSelect.length) {
                     vrEls.monitorSelect.val(String(currentVrConfig.monitorIndex));
                 }
+                if (vrEls.aspectLock && vrEls.aspectLock.length) {
+                    vrEls.aspectLock.prop("checked", !!currentVrConfig.aspectLock);
+                }
                 var displayUrl = sanitizeVrUrl(currentVrConfig.serverUrl) || "http://localhost:5000";
                 if (vrEls.instructionIp && vrEls.instructionIp.length) {
                     vrEls.instructionIp.text(displayUrl);
                 }
+                updateCropOverlayFromConfig();
             }
 
             function updateMonitorOptions(monitors) {
@@ -1267,6 +1380,314 @@
                     });
                 }
                 vrEls.monitorSelect.val(String(currentVrConfig.monitorIndex));
+                updateCropOverlayFromConfig();
+            }
+
+            function clamp(value, minimum, maximum) {
+                return Math.min(Math.max(value, minimum), maximum);
+            }
+
+            function getActiveMonitorInfo() {
+                if (!vrMonitors || !vrMonitors.length) {
+                    return null;
+                }
+                var targetIndex = parseInt(currentVrConfig.monitorIndex, 10);
+                var selected = vrMonitors.find(function (mon) {
+                    return parseInt(mon.index, 10) === targetIndex;
+                });
+                return selected || vrMonitors[0];
+            }
+
+            function getPreviewAspectRatio() {
+                var fallback = 16 / 9;
+                var width = 0;
+                var height = 0;
+                if (currentVrConfig.mode === "monitor") {
+                    var monitorInfo = getActiveMonitorInfo();
+                    if (monitorInfo) {
+                        width = parseInt(monitorInfo.width, 10);
+                        height = parseInt(monitorInfo.height, 10);
+                    }
+                } else {
+                    width = parseInt(currentVrConfig.region.width, 10);
+                    height = parseInt(currentVrConfig.region.height, 10);
+                    if (!(width > 0 && height > 0)) {
+                        var regionFallback = getActiveMonitorInfo();
+                        if (regionFallback) {
+                            width = parseInt(regionFallback.width, 10);
+                            height = parseInt(regionFallback.height, 10);
+                        }
+                    }
+                }
+                if (!(width > 0 && height > 0)) {
+                    return fallback;
+                }
+                var ratio = width / height;
+                if (!isFinite(ratio) || ratio <= 0) {
+                    return fallback;
+                }
+                return clamp(ratio, 0.25, 4);
+            }
+
+            function updatePreviewAspectRatio() {
+                var ratio = getPreviewAspectRatio();
+                document.querySelectorAll(".vr-preview-display").forEach(function (el) {
+                    el.style.setProperty("--vr-preview-aspect", ratio);
+                });
+            }
+
+            function normalizedRectFromConfig() {
+                var mon = getActiveMonitorInfo();
+                if (!mon || !mon.width || !mon.height) {
+                    return null;
+                }
+                var left = clamp(currentVrConfig.region.left || 0, 0, Math.max(0, mon.width));
+                var top = clamp(currentVrConfig.region.top || 0, 0, Math.max(0, mon.height));
+                var width = Math.max(1, currentVrConfig.region.width || mon.width);
+                var height = Math.max(1, currentVrConfig.region.height || mon.height);
+                if (left + width > mon.width) {
+                    width = mon.width - left;
+                }
+                if (top + height > mon.height) {
+                    height = mon.height - top;
+                }
+                return {
+                    x: left / mon.width,
+                    y: top / mon.height,
+                    width: Math.max(width / mon.width, 0.01),
+                    height: Math.max(height / mon.height, 0.01)
+                };
+            }
+
+            function clampRect(rect) {
+                var min = 0.01;
+                rect.width = Math.max(rect.width, min);
+                rect.height = Math.max(rect.height, min);
+                rect.x = clamp(rect.x, 0, 1 - rect.width);
+                rect.y = clamp(rect.y, 0, 1 - rect.height);
+                return rect;
+            }
+
+            function enforceAspectRatioRect(rect) {
+                var ratio = 2;
+                var startRect = cropDragState.startRect || rect;
+                var widthChange = Math.abs(rect.width - startRect.width);
+                var heightChange = Math.abs(rect.height - startRect.height);
+                var useWidth = widthChange >= heightChange;
+                var centerX = rect.x + rect.width / 2;
+                var centerY = rect.y + rect.height / 2;
+                if (useWidth) {
+                    rect.height = rect.width / ratio;
+                } else {
+                    rect.width = rect.height * ratio;
+                }
+                rect = clampRect(rect);
+                rect.x = centerX - rect.width / 2;
+                rect.y = centerY - rect.height / 2;
+                rect = clampRect(rect);
+                return rect;
+            }
+
+            function updateCropOverlayFromConfig() {
+                if (!vrCropOverlayEl || !vrCropSelectionEl) {
+                    updatePreviewAspectRatio();
+                    return;
+                }
+                if (currentVrConfig.mode !== "region") {
+                    vrCropOverlayEl.classList.add("disabled");
+                    vrCropSelectionEl.classList.add("hidden");
+                    updatePreviewAspectRatio();
+                    return;
+                }
+                var normalized = normalizedRectFromConfig();
+                if (!normalized) {
+                    vrCropOverlayEl.classList.add("disabled");
+                    vrCropSelectionEl.classList.add("hidden");
+                    updatePreviewAspectRatio();
+                    return;
+                }
+                cropOverlayRect = clampRect(normalized);
+                vrCropOverlayEl.classList.remove("disabled");
+                renderCropSelection();
+                updatePreviewAspectRatio();
+            }
+
+            function renderCropSelection() {
+                if (!vrCropOverlayEl || !vrCropSelectionEl) return;
+                if (vrCropOverlayEl.classList.contains("disabled")) {
+                    vrCropSelectionEl.classList.add("hidden");
+                    return;
+                }
+                var width = vrCropOverlayEl.clientWidth;
+                var height = vrCropOverlayEl.clientHeight;
+                if (!width || !height) {
+                    vrCropSelectionEl.classList.add("hidden");
+                    return;
+                }
+                vrCropSelectionEl.classList.remove("hidden");
+                vrCropSelectionEl.style.left = (cropOverlayRect.x * 100) + "%";
+                vrCropSelectionEl.style.top = (cropOverlayRect.y * 100) + "%";
+                vrCropSelectionEl.style.width = (cropOverlayRect.width * 100) + "%";
+                vrCropSelectionEl.style.height = (cropOverlayRect.height * 100) + "%";
+            }
+
+            function applyCropDragDelta(startRect, mode, dx, dy) {
+                var rect = Object.assign({}, startRect);
+                var min = 0.01;
+                if (mode === "move") {
+                    rect.x = clamp(rect.x + dx, 0, 1 - rect.width);
+                    rect.y = clamp(rect.y + dy, 0, 1 - rect.height);
+                } else {
+                    if (mode.indexOf("n") >= 0) {
+                        var newTop = clamp(startRect.y + dy, 0, startRect.y + startRect.height - min);
+                        rect.height = startRect.height + (startRect.y - newTop);
+                        rect.y = newTop;
+                    }
+                    if (mode.indexOf("s") >= 0) {
+                        rect.height = clamp(startRect.height + dy, min, 1 - rect.y);
+                    }
+                    if (mode.indexOf("w") >= 0) {
+                        var newLeft = clamp(startRect.x + dx, 0, startRect.x + startRect.width - min);
+                        rect.width = startRect.width + (startRect.x - newLeft);
+                        rect.x = newLeft;
+                    }
+                    if (mode.indexOf("e") >= 0) {
+                        rect.width = clamp(startRect.width + dx, min, 1 - rect.x);
+                    }
+                }
+                if (currentVrConfig.aspectLock && mode !== "move") {
+                    rect = enforceAspectRatioRect(rect);
+                }
+                return clampRect(rect);
+            }
+
+            function applyOverlayRectToConfig(commit, syncInputs) {
+                if (currentVrConfig.mode !== "region") {
+                    return;
+                }
+                var mon = getActiveMonitorInfo();
+                if (!mon || !mon.width || !mon.height) {
+                    return;
+                }
+                var region = {
+                    left: Math.round(cropOverlayRect.x * mon.width),
+                    top: Math.round(cropOverlayRect.y * mon.height),
+                    width: Math.round(cropOverlayRect.width * mon.width),
+                    height: Math.round(cropOverlayRect.height * mon.height)
+                };
+                region.left = clamp(region.left, 0, Math.max(0, mon.width - 1));
+                region.top = clamp(region.top, 0, Math.max(0, mon.height - 1));
+                if (region.left + region.width > mon.width) {
+                    region.width = mon.width - region.left;
+                }
+                if (region.top + region.height > mon.height) {
+                    region.height = mon.height - region.top;
+                }
+                region.width = Math.max(region.width, 1);
+                region.height = Math.max(region.height, 1);
+                if (currentVrConfig.aspectLock) {
+                    region.height = Math.round(region.width / 2);
+                    if (region.top + region.height > mon.height) {
+                        region.height = mon.height - region.top;
+                        region.width = Math.round(region.height * 2);
+                        if (region.left + region.width > mon.width) {
+                            region.width = mon.width - region.left;
+                            region.height = Math.round(region.width / 2);
+                        }
+                    }
+                }
+                currentVrConfig.region.top = region.top;
+                currentVrConfig.region.left = region.left;
+                currentVrConfig.region.width = region.width;
+                currentVrConfig.region.height = region.height;
+                if (syncInputs) {
+                    updateRegionInputsFromCurrent();
+                }
+                if (commit) {
+                    if (sanitizeVrUrl(currentVrConfig.serverUrl)) {
+                        sendVrConfigToServer();
+                    }
+                }
+            }
+
+            function updateRegionInputsFromCurrent() {
+                if (!vrEls.topInput) {
+                    return;
+                }
+                vrEls.topInput.val(currentVrConfig.region.top);
+                vrEls.leftInput.val(currentVrConfig.region.left);
+                vrEls.widthInput.val(currentVrConfig.region.width);
+                vrEls.heightInput.val(currentVrConfig.region.height);
+            }
+
+            function updateRegionFromInputs() {
+                if (!vrEls.topInput) return;
+                currentVrConfig.region.top = readNumberValue(vrEls.topInput, currentVrConfig.region.top, 0);
+                currentVrConfig.region.left = readNumberValue(vrEls.leftInput, currentVrConfig.region.left, 0);
+                currentVrConfig.region.width = readNumberValue(vrEls.widthInput, currentVrConfig.region.width, 1);
+                currentVrConfig.region.height = readNumberValue(vrEls.heightInput, currentVrConfig.region.height, 1);
+                updateCropOverlayFromConfig();
+            }
+
+            function startCropDrag(mode, evt) {
+                if (!vrCropOverlayEl || !vrCropSelectionEl) return;
+                if (vrCropOverlayEl.classList.contains("disabled") || currentVrConfig.mode !== "region") {
+                    return;
+                }
+                if (evt.button !== 0) return;
+                evt.preventDefault();
+                cropDragState = {
+                    active: true,
+                    mode: mode,
+                    startX: evt.clientX,
+                    startY: evt.clientY,
+                    containerRect: vrCropOverlayEl.getBoundingClientRect(),
+                    startRect: Object.assign({}, cropOverlayRect)
+                };
+                document.addEventListener("pointermove", handleCropPointerMove);
+                document.addEventListener("pointerup", handleCropPointerUp);
+            }
+
+            function handleCropPointerMove(evt) {
+                if (!cropDragState.active) return;
+                evt.preventDefault();
+                var dx = 0;
+                var dy = 0;
+                if (cropDragState.containerRect.width > 0) {
+                    dx = (evt.clientX - cropDragState.startX) / cropDragState.containerRect.width;
+                }
+                if (cropDragState.containerRect.height > 0) {
+                    dy = (evt.clientY - cropDragState.startY) / cropDragState.containerRect.height;
+                }
+                var next = applyCropDragDelta(cropDragState.startRect, cropDragState.mode, dx, dy);
+                cropOverlayRect = next;
+                renderCropSelection();
+                applyOverlayRectToConfig(false, true);
+            }
+
+            function handleCropPointerUp() {
+                if (!cropDragState.active) return;
+                document.removeEventListener("pointermove", handleCropPointerMove);
+                document.removeEventListener("pointerup", handleCropPointerUp);
+                cropDragState.active = false;
+                applyOverlayRectToConfig(true, true);
+            }
+
+            function attachCropOverlayEvents() {
+                if (!vrCropSelectionEl) return;
+                vrCropSelectionEl.addEventListener("pointerdown", function (evt) {
+                    if (evt.target && evt.target.classList.contains("vr-crop-handle")) {
+                        return;
+                    }
+                    startCropDrag("move", evt);
+                });
+                var handles = vrCropSelectionEl.querySelectorAll(".vr-crop-handle");
+                handles.forEach(function (handle) {
+                    handle.addEventListener("pointerdown", function (evt) {
+                        startCropDrag(handle.getAttribute("data-handle") || "se", evt);
+                        evt.stopPropagation();
+                    });
+                });
             }
 
             function sanitizeVrUrl(url) {
@@ -1541,6 +1962,7 @@
                 currentVrConfig.fps = readNumberValue(vrEls.fpsInput, defaultVrConfig.fps, 1);
                 currentVrConfig.quality = readNumberValue(vrEls.qualityInput, defaultVrConfig.quality, 10);
                 currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                currentVrConfig.aspectLock = vrEls.aspectLock ? vrEls.aspectLock.is(":checked") : currentVrConfig.aspectLock;
                 persistVrConfig();
                 updateVrInputs();
                 updateVrFrameSource();
@@ -1554,6 +1976,8 @@
                 currentVrConfig.region.width = readNumberValue(vrEls.widthInput, currentVrConfig.region.width, 1);
                 currentVrConfig.region.height = readNumberValue(vrEls.heightInput, currentVrConfig.region.height, 1);
                 currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                currentVrConfig.aspectLock = vrEls.aspectLock ? vrEls.aspectLock.is(":checked") : currentVrConfig.aspectLock;
+                updateCropOverlayFromConfig();
                 persistVrConfig();
                 sendVrConfigToServer();
             });
@@ -1566,6 +1990,30 @@
             $("#btn-vr-refresh-preview").on("click", function (e) {
                 e.preventDefault();
                 refreshVrPreview();
+            });
+
+            if (vrEls.modeSelect && vrEls.modeSelect.length) {
+                vrEls.modeSelect.on("change", function () {
+                    currentVrConfig.mode = (vrEls.modeSelect.val() === "monitor") ? "monitor" : "region";
+                    updateCropOverlayFromConfig();
+                });
+            }
+            if (vrEls.monitorSelect && vrEls.monitorSelect.length) {
+                vrEls.monitorSelect.on("change", function () {
+                    currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                    updateCropOverlayFromConfig();
+                });
+            }
+            if (vrEls.aspectLock && vrEls.aspectLock.length) {
+                vrEls.aspectLock.on("change", function () {
+                    currentVrConfig.aspectLock = $(this).is(":checked");
+                    updateCropOverlayFromConfig();
+                });
+            }
+            [vrEls.topInput, vrEls.leftInput, vrEls.widthInput, vrEls.heightInput].forEach(function (inputEl) {
+                if (inputEl && inputEl.length) {
+                    inputEl.on("change", updateRegionFromInputs);
+                }
             });
 
             $("#btn-vr-seq-dims").on("click", function (e) {
@@ -1660,6 +2108,12 @@
                     updateBackupIntervalUI(data.minutes);
                 }
             });
+
+            attachCropOverlayEvents();
+            if (vrEls.previewImage && vrEls.previewImage.length) {
+                vrEls.previewImage.on("load", renderCropSelection);
+            }
+            window.addEventListener("resize", renderCropSelection);
         });
     </script>
 </head>
@@ -1865,6 +2319,15 @@
                         </div>
                         <div class="vr-preview-display">
                             <img id="vrPreviewImage" alt="VR preview stream">
+                            <div class="vr-crop-overlay disabled" id="vrCropOverlay">
+                                <div class="vr-crop-selection hidden" id="vrCropSelection">
+                                    <div class="vr-crop-center-line"></div>
+                                    <div class="vr-crop-handle handle-nw" data-handle="nw"></div>
+                                    <div class="vr-crop-handle handle-ne" data-handle="ne"></div>
+                                    <div class="vr-crop-handle handle-sw" data-handle="sw"></div>
+                                    <div class="vr-crop-handle handle-se" data-handle="se"></div>
+                                </div>
+                            </div>
                             <div class="vr-preview-overlay" id="vrPreviewOverlay">Waiting for server...</div>
                         </div>
                     </div>
@@ -1932,6 +2395,13 @@
                             <label>Height (px)
                                 <input type="number" id="vrHeight" min="1">
                             </label>
+                        </div>
+                        <div class="vr-aspect-row">
+                            <label>
+                                <input type="checkbox" id="vrAspectLock">
+                                <span>Maintain 2:1 crop (SBS)</span>
+                            </label>
+                            <span class="vr-aspect-note">Adds a center guide for quick alignment.</span>
                         </div>
                         <div class="vr-button-row">
                             <button class="pill-btn" id="btn-vr-seq-dims">Use Sequence Size</button>

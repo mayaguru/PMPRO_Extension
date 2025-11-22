@@ -12,7 +12,55 @@ from PIL import Image
 app = Flask(__name__)
 
 
+# --- Global Capture State ---
 CONFIG_LOCK = threading.Lock()
+CAPTURE_CONFIG = {
+    "mode": "region",  # region or monitor
+    "monitor_index": 1,  # 1 = primary monitor (mss index), 0 = virtual desktop
+    "region": {
+        "top": 0,
+        "left": 0,
+        "width": 1280,
+        "height": 720,
+    },
+    "fps": 30,
+    "quality": 80,
+}
+
+FRAME_CONDITION = threading.Condition()
+LATEST_FRAME_BYTES = None
+LATEST_BBOX = None
+CAPTURE_THREAD_STARTED = False
+
+
+def background_capture_loop():
+    """Background thread to capture screen continuously."""
+    global LATEST_FRAME_BYTES, LATEST_BBOX
+    print("Background capture loop started.")
+    with mss.mss() as sct:
+        while True:
+            cfg = clone_config()
+            try:
+                frame_bytes, bbox = encode_frame_bytes(sct, cfg)
+                if frame_bytes:
+                    with FRAME_CONDITION:
+                        LATEST_FRAME_BYTES = frame_bytes
+                        LATEST_BBOX = bbox
+                        FRAME_CONDITION.notify_all()
+
+                fps = clamp(int(cfg.get("fps", 30)), 1, 60)
+                time.sleep(1.0 / fps)
+            except Exception as exc:
+                print(f"Capture error: {exc}")
+                time.sleep(1)
+
+
+def start_background_thread():
+    global CAPTURE_THREAD_STARTED
+    if not CAPTURE_THREAD_STARTED:
+        t = threading.Thread(target=background_capture_loop, daemon=True)
+        t.start()
+        CAPTURE_THREAD_STARTED = True
 CAPTURE_CONFIG = {
     "mode": "region",  # region or monitor
     "monitor_index": 1,  # 1 = primary monitor (mss index), 0 = virtual desktop
@@ -188,27 +236,18 @@ def encode_frame_bytes(sct, cfg):
     return frame_buffer.getvalue(), bbox
 
 
-def capture_screen():
-    """Generator that captures screen and yields JPEG frames."""
-    with mss.mss() as sct:
-        while True:
-            cfg = clone_config()
-            try:
-                frame_bytes, _ = encode_frame_bytes(sct, cfg)
-                if frame_bytes is None:
-                    time.sleep(1)
-                    continue
+def generate_mjpeg_stream():
+    """Generator that yields MJPEG frames from the shared buffer."""
+    while True:
+        with FRAME_CONDITION:
+            FRAME_CONDITION.wait()
+            frame = LATEST_FRAME_BYTES
 
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-                )
-
-                fps = clamp(int(cfg.get("fps", 30)), 1, 60)
-                time.sleep(1.0 / fps)
-            except Exception as exc:  # pragma: no cover - guard rails for runtime errors
-                print(f"Capture error: {exc}")
-                time.sleep(1)
+        if frame:
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+            )
 
 
 @app.route("/")
@@ -221,7 +260,7 @@ def index():
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
     return Response(
-        capture_screen(), mimetype="multipart/x-mixed-replace; boundary=frame"
+        generate_mjpeg_stream(), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
 
@@ -277,9 +316,10 @@ def health():
 @app.route("/frame.jpg")
 def frame_jpg():
     """Returns a single JPEG frame for WebXR texture updates."""
-    with mss.mss() as sct:
-        cfg = clone_config()
-        frame_bytes, bbox = encode_frame_bytes(sct, cfg)
+    with FRAME_CONDITION:
+        frame_bytes = LATEST_FRAME_BYTES
+        bbox = LATEST_BBOX
+
     if not frame_bytes:
         return Response(status=503)
 
@@ -300,6 +340,7 @@ def add_cors_headers(response):
 
 
 if __name__ == "__main__":
+    start_background_thread()
     print("Starting VR Streamer...")
     print("1. Ensure your VR headset is on the SAME Wi-Fi.")
     print("2. Find your PC's IP address (automatically shown in the panel).")

@@ -287,10 +287,9 @@
             padding-left: 18px;
         }
 
-        #controlCollapseBtn {
+        .control-toggle-btn {
             position: absolute;
             left: 32px;
-            top: 140px;
             z-index: 5;
             display: inline-flex;
             align-items: center;
@@ -309,13 +308,28 @@
             box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
         }
 
-        #controlCollapseBtn::before {
-            content: '⇕';
+        #controlCollapseBtn {
+            top: 140px;
+        }
+
+        #controlCompactBtn {
+            top: 190px;
+        }
+
+        .control-toggle-btn::before {
             font-size: 15px;
             opacity: 0.9;
         }
 
-        #controlCollapseBtn:hover {
+        #controlCollapseBtn::before {
+            content: '⇕';
+        }
+
+        #controlCompactBtn::before {
+            content: '☰';
+        }
+
+        .control-toggle-btn:hover {
             background: rgba(47, 128, 237, 0.85);
             color: #fff;
         }
@@ -348,7 +362,34 @@
             overflow: hidden;
         }
 
-        @media (max-width: 1024px) {
+        body.controls-compact #control-panel {
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            padding: 18px 20px 24px;
+            gap: 12px;
+            max-width: min(1200px, 95vw);
+            margin: 0 auto;
+        }
+
+        body.controls-compact .panel-card {
+            padding: 14px;
+        }
+
+        body.controls-compact .panel-card h3 {
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        body.controls-compact #mini-preview {
+            height: 90px;
+        }
+
+        @media (max-width: 1500px) {
+            #control-panel {
+                grid-template-columns: repeat(2, minmax(260px, 1fr));
+            }
+        }
+
+        @media (max-width: 1180px) {
             #header {
                 flex-direction: column;
                 gap: 14px;
@@ -363,11 +404,16 @@
                 grid-template-columns: 1fr;
             }
 
-            #controlCollapseBtn {
+            #controlCollapseBtn,
+            #controlCompactBtn {
                 top: auto;
                 bottom: 24px;
                 left: auto;
                 right: 32px;
+            }
+
+            #controlCompactBtn {
+                bottom: 70px;
             }
         }
     </style>
@@ -474,7 +520,8 @@
                     <div id="log">Ready.</div>
                 </div>
             </div>
-            <button id="controlCollapseBtn" aria-expanded="true">Hide Controls</button>
+            <button id="controlCollapseBtn" class="control-toggle-btn" aria-expanded="true">Hide Controls</button>
+            <button id="controlCompactBtn" class="control-toggle-btn" aria-pressed="false">Compact Layout</button>
         </div>
     </div>
 
@@ -548,16 +595,29 @@
         function buildScreen() {
             if (screenMesh) {
                 scene.remove(screenMesh);
+                if (screenMesh.geometry) screenMesh.geometry.dispose();
+                if (screenMesh.material) screenMesh.material.dispose();
             }
 
             let geometry;
             if (screenState.curvature < 0.05) {
                 geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, 32, 1);
             } else {
-                const arc = THREE.MathUtils.lerp(Math.PI / 10, Math.PI / 1.8, screenState.curvature);
+                const segments = 96;
+                geometry = new THREE.PlaneGeometry(screenState.width, screenState.height, segments, 1);
+                const arc = THREE.MathUtils.lerp(Math.PI / 60, Math.PI / 1.4, screenState.curvature);
                 const radius = screenState.width / arc;
-                geometry = new THREE.CylinderGeometry(radius, radius, screenState.height, 72, 1, true, Math.PI / 2 - arc / 2, arc);
-                geometry.scale(-1, 1, 1);
+                const pos = geometry.attributes.position;
+                for (let i = 0; i < pos.count; i++) {
+                    const x = pos.getX(i);
+                    const angle = (x / screenState.width) * arc;
+                    const targetX = Math.sin(angle) * radius;
+                    const targetZ = radius - Math.cos(angle) * radius;
+                    pos.setX(i, targetX);
+                    pos.setZ(i, targetZ);
+                }
+                pos.needsUpdate = true;
+                geometry.computeVertexNormals();
             }
 
             const material = new THREE.MeshBasicMaterial({
@@ -618,13 +678,24 @@
         miniPreview.crossOrigin = "anonymous";
         miniPreview.src = "/video_feed";
         const collapseBtn = document.getElementById('controlCollapseBtn');
+        const compactBtn = document.getElementById('controlCompactBtn');
         let controlsCollapsed = false;
+        let controlsCompact = window.innerWidth < 1500;
+        let compactManualOverride = false;
 
         function updateCollapseState() {
             document.body.classList.toggle('controls-collapsed', controlsCollapsed);
             if (collapseBtn) {
                 collapseBtn.textContent = controlsCollapsed ? 'Show Controls' : 'Hide Controls';
                 collapseBtn.setAttribute('aria-expanded', (!controlsCollapsed).toString());
+            }
+        }
+
+        function updateCompactState() {
+            document.body.classList.toggle('controls-compact', controlsCompact);
+            if (compactBtn) {
+                compactBtn.textContent = controlsCompact ? 'Full Layout' : 'Compact Layout';
+                compactBtn.setAttribute('aria-pressed', controlsCompact ? 'true' : 'false');
             }
         }
 
@@ -635,6 +706,27 @@
             });
         }
         updateCollapseState();
+
+        if (compactBtn) {
+            compactBtn.addEventListener('click', () => {
+                controlsCompact = !controlsCompact;
+                compactManualOverride = true;
+                updateCompactState();
+            });
+        }
+        updateCompactState();
+
+        const compactMedia = window.matchMedia('(max-width: 1500px)');
+        const compactMediaHandler = (evt) => {
+            if (compactManualOverride) return;
+            controlsCompact = evt.matches;
+            updateCompactState();
+        };
+        if (compactMedia.addEventListener) {
+            compactMedia.addEventListener('change', compactMediaHandler);
+        } else if (compactMedia.addListener) {
+            compactMedia.addListener(compactMediaHandler);
+        }
 
         function setServerStatus(text, online) {
             serverStatusLabel.textContent = text;
@@ -704,11 +796,9 @@
                 }
             }
 
-            if (miniPreview.complete && miniPreview.naturalWidth > 0) {
-                pump();
-            } else {
-                miniPreview.addEventListener('load', pump, { once: true });
-            }
+            // MJPEG streams never fire a load event because the request stays open.
+            // Start pumping immediately and rely on naturalWidth checks to skip blank frames.
+            pump();
         }
 
         async function probeFrameEndpoint() {
@@ -726,12 +816,11 @@
         }
 
         async function beginStreaming() {
+            startMjpegFallback();
             const hasFrameEndpoint = await probeFrameEndpoint();
             if (hasFrameEndpoint) {
                 state.useFrameEndpoint = true;
                 fetchFrameLoop();
-            } else {
-                startMjpegFallback();
             }
         }
 
