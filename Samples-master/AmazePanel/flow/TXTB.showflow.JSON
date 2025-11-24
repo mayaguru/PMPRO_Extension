@@ -11,79 +11,84 @@
   "slots": [
     {
       "time": 0,
+      "name": "TXTBClip100BranchA",
       "clips": {
         "A": "TXTBClip100BranchA",
         "B": "TXTBClip100BranchB",
         "C": "TXTBClip100BranchC",
         "D": "TXTBClip100BranchD",
         "E": "TXTBClip100BranchE"
-      },
-      "name": "TXTBClip100BranchA"
+      }
     },
     {
       "time": 115,
+      "name": "TXTBClip120",
       "clips": {
         "A": "TXTBClip120"
-      },
-      "name": "TXTBClip120"
+      }
     },
     {
       "time": 1116,
+      "name": "TXTBClip130branch2A",
       "clips": {
         "A": "TXTBClip130branch2A",
         "B": "TXTBClip130branch2B",
         "C": "TXTBClip130branch2C",
         "D": "TXTBClip130branch2D",
         "E": "TXTBClip130branch2E"
-      },
-      "name": "TXTBClip130branch2A"
+      }
     },
     {
-      "time": 1264,
+      "time": 1426,
+      "name": "TXTBClip140",
       "clips": {
         "A": "TXTBClip140"
-      },
-      "name": "TXTBClip140"
+      }
     },
     {
       "time": 2082,
+      "name": "TXTBClip150",
       "clips": {
         "A": "TXTBClip150"
-      },
-      "name": "TXTBClip150"
+      }
     },
     {
       "time": 2264,
+      "name": "TXTBClip160",
       "clips": {
         "A": "TXTBClip160"
-      },
-      "name": "TXTBClip160"
+      }
     },
     {
       "time": 2576,
+      "name": "TXTBClip170",
       "clips": {
         "A": "TXTBClip170"
-      },
-      "name": "TXTBClip170"
+      }
     },
     {
-      "time": 3596,
+      "time": 3315,
+      "name": "TXTBClip180branch3A",
       "clips": {
         "A": "TXTBClip180branch3A",
         "B": "TXTBClip180branch3B",
         "C": "TXTBClip180branch3C",
         "D": "TXTBClip180branch3D",
         "E": "TXTBClip180branch3E"
-      },
-      "name": "TXTBClip180branch3A"
+      }
     },
     {
       "time": 3984,
+      "name": "END",
       "clips": {
         "A": "TXTBClip190"
-      },
-      "name": "END"
+      }
+    },
+    {
+      "time": 5287,
+      "name": "END",
+      "clips": {}
     }
   ],
-  "endFrame": 4663
+  "endFrame": 5887
 }

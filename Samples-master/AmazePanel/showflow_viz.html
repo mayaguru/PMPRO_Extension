@@ -17,6 +17,64 @@
             --track-label-width: 70px;
         }
 
+        function confirmOverwriteSequence() {
+            showConfirm("Overwrite active sequence markers with current Showflow markers?\nExisting markers will be deleted.", "Overwrite Seq").then(function (ok) {
+                if (ok) pushMarkersToSequence('replace');
+            });
+        }
+
+        function overwriteShowflowFromSequence() {
+            var cfgPath = getFlowConfigPath();
+            var cfgPathJSX = (cfgPath || "").replace(/\\/g, "/");
+            var jsx = "(function(){\n" +
+                "if(!app.project || !app.project.activeSequence){return 'ERR|No active sequence';}\n" +
+                "var cfgPath='" + cfgPathJSX + "';\n" +
+                "function loadCfg(){try{var f=new File(cfgPath);if(!f.exists)return null;f.encoding='UTF-8';if(f.open('r')){var t=f.read();f.close();return JSON.parse(t);} }catch(e){}return null;}\n" +
+                "function loadFlow(p){if(!p)return null;var f=new File(p);if(!f.exists)return null;try{f.encoding='UTF-8';if(f.open('r')){var t=f.read();f.close();return JSON.parse(t);} }catch(e){}return null;}\n" +
+                "function saveFlow(p,obj){try{var f=new File(p);f.encoding='UTF-8';if(f.open('w')){f.write(JSON.stringify(obj,null,2));f.close();return true;}}catch(e){}return false;}\n" +
+                "function getFPS(seq){var fps=60;try{if(seq.videoFrameRate && seq.videoFrameRate.seconds){var v=1/Number(seq.videoFrameRate.seconds);if(v>0)fps=Math.round(v);}}catch(e){}return fps;}\n" +
+                "var cfg=loadCfg(); if(!cfg||!cfg.flowPath){return 'ERR|flowPath missing';}\n" +
+                "var flow=loadFlow(cfg.flowPath) || {showId:'from_sequence', fps:60, tracks:{'A':0}, slots:[]};\n" +
+                "var seq=app.project.activeSequence; var fps=getFPS(seq);\n" +
+                "var markers=seq.markers; if(!markers||markers.numMarkers===0){return 'ERR|No markers';}\n" +
+                "var arr=[]; var m=markers.getFirstMarker(); while(m){arr.push(m); m=markers.getNextMarker(m);} arr.sort(function(a,b){return Number(a.start.ticks)-Number(b.start.ticks);});\n" +
+                "var oldSlots=(flow.slots||[]).slice();\n" +
+                "var newSlots=[];\n" +
+                "for(var i=0;i<arr.length;i++){\n" +
+                "  var mk=arr[i];\n" +
+                "  var mkFrame=Math.round((Number(mk.start.ticks)/(254016000000/fps)));\n" +
+                "  var nextFrame=(i<arr.length-1)?Math.round((Number(arr[i+1].start.ticks)/(254016000000/fps))):(mkFrame+600);\n" +
+                "  if(nextFrame<=mkFrame) nextFrame=mkFrame+1;\n" +
+                "  var slot={time:mkFrame,duration:(nextFrame-mkFrame),name:(mk.name||('Marker '+(i+1))),clips:{}};\n" +
+                "  if(oldSlots[i] && oldSlots[i].clips){slot.clips=JSON.parse(JSON.stringify(oldSlots[i].clips));}\n" +
+                "  newSlots.push(slot);\n" +
+                "}\n" +
+                "flow.fps=fps; flow.slots=newSlots;\n" +
+                "if(!flow.tracks || Object.keys(flow.tracks).length===0){flow.tracks={'A':0};}\n" +
+                "var ok=saveFlow(cfg.flowPath, flow);\n" +
+                "if(!ok){return 'ERR|Failed to save flow';}\n" +
+                "return 'OK|' + cfg.flowPath + '|' + newSlots.length;\n" +
+                "})();";
+            csInterface.evalScript(jsx, function (res) {
+                if (!res) {
+                    showAlert("No response from ExtendScript.", "Overwrite Flow");
+                    return;
+                }
+                if (res.indexOf("OK|") === 0) {
+                    var parts = res.split("|");
+                    var path = parts[1] || "";
+                    var count = parts[2] || "";
+                    showAlert("Flow overwritten from active sequence.\nMarkers: " + count + "\nPath: " + path, "Overwrite Flow");
+                    loadData();
+                    return;
+                }
+                if (res.indexOf("ERR|") === 0) {
+                    showAlert(res.substring(4), "Overwrite Flow");
+                    return;
+                }
+                showAlert("Unexpected response: " + res, "Overwrite Flow");
+            });
+        }
         body {
             background-color: #1a1a1a;
             color: #b5b5b5;
@@ -1034,12 +1092,13 @@
 
     <div id="tools-bar">
         <div class="tool-group">
-            <span class="group-label">Markers → Sequence</span>
-            <button onclick="pushMarkersToSequence('replace')">Replace All</button>
+            <span class="group-label">Showflow → Sequence</span>
+            <button onclick="pushMarkersToSequence('replace')">PUSH!!</button>
         </div>
         <div class="tool-group">
             <span class="group-label">Sequence → Showflow</span>
-            <button onclick="pullMarkersFromSequence()">Import</button>
+            <button onclick="pullMarkersFromSequence()">PULL~~</button>
+            <button onclick="verifyMarkersAgainstShowflow()">Verify</button>
         </div>
         <div class="tool-group playhead-group">
             <span class="group-label">Playhead</span>
@@ -3579,6 +3638,103 @@
                     setMarkerStatus("Failed to import markers.", true);
                     showAlert("Failed to import markers: " + e, "Import Markers");
                 }
+            });
+        }
+
+        function verifyMarkersAgainstShowflow() {
+            var cfgPath = getFlowConfigPath();
+            var cfgPathForJSX = (cfgPath || "").replace(/\\/g, "/");
+            var jsx = "(function(){\n" +
+                "if(!app.project || !app.project.activeSequence){return 'ERR|No active sequence';}\n" +
+                "var cfgPath='" + cfgPathForJSX + "';\n" +
+                "function loadCfg(){try{var f=new File(cfgPath);if(!f.exists)return null;f.encoding='UTF-8';if(f.open('r')){var t=f.read();f.close();return JSON.parse(t);} }catch(e){}return null;}\n" +
+                "function loadFlow(p){if(!p)return null;var f=new File(p);if(!f.exists)return null;try{f.encoding='UTF-8';if(f.open('r')){var t=f.read();f.close();return JSON.parse(t);} }catch(e){}return null;}\n" +
+                "function getFPS(seq){var fps=60;try{if(seq.videoFrameRate && seq.videoFrameRate.seconds){var v=1/Number(seq.videoFrameRate.seconds);if(v>0)fps=Math.round(v);}}catch(e){}return fps;}\n" +
+                "var cfg=loadCfg(); if(!cfg||!cfg.flowPath){return 'ERR|flowPath missing';}\n" +
+                "var flow=loadFlow(cfg.flowPath); if(!flow||!flow.slots||!flow.slots.length){return 'ERR|Flow load failed or no slots';}\n" +
+                "var seq=app.project.activeSequence;\n" +
+                "var markers=seq.markers; if(!markers||markers.numMarkers===0){return 'ERR|No markers';}\n" +
+                "var arr=[]; var m=markers.getFirstMarker(); while(m){arr.push(m); m=markers.getNextMarker(m);} arr.sort(function(a,b){return Number(a.start.ticks)-Number(b.start.ticks);});\n" +
+                "var slots=flow.slots.slice().sort(function(a,b){return Number(a.time||0)-Number(b.time||0);});\n" +
+                "var fps=getFPS(seq); var TPS=254016000000; var mismatches=[];\n" +
+                "if(arr.length!==slots.length){mismatches.push({type:'count', markerCount:arr.length, slotCount:slots.length});}\n" +
+                "var c=Math.min(arr.length, slots.length);\n" +
+                "for(var i=0;i<c;i++){\n" +
+                "  var mk=arr[i], sl=slots[i];\n" +
+                "  var mkFrame=Math.round((Number(mk.start.ticks)/TPS)*fps);\n" +
+                "  var slFrame=Number(sl.time||0);\n" +
+                "  var mkName=mk.name||'', slName=sl.name||'';\n" +
+                "  var frameDiff = mkFrame - slFrame;\n" +
+                "  if(mkFrame!==slFrame){mismatches.push({type:'frame', index:i, markerFrame:mkFrame, slotFrame:slFrame, diff:frameDiff});}\n" +
+                "  if(slName && mkName!==slName){mismatches.push({type:'name', index:i, markerName:mkName, slotName:slName});} \n" +
+                "}\n" +
+                "var res={ok:(mismatches.length===0), seq:seq.name||'', flowPath:cfg.flowPath, markerCount:arr.length, slotCount:slots.length, mismatches:mismatches};\n" +
+                "return 'JSON|' + encodeURIComponent(JSON.stringify(res));\n" +
+                "})();";
+
+            csInterface.evalScript(jsx, function (res) {
+                if (!res) {
+                    showAlert("No response from ExtendScript.", "Verify Markers");
+                    return;
+                }
+                if (res.indexOf("JSON|") === 0) {
+                    try {
+                        var data = JSON.parse(decodeURIComponent(res.substring(5)));
+                        showVerifyResult(data);
+                        return;
+                    } catch (e) {
+                        showAlert("Parse error: " + e, "Verify Markers");
+                        return;
+                    }
+                }
+                if (res.indexOf("ERR|") === 0) {
+                    var em = res.substring(4);
+                    showAlert("Mismatch:\n" + em, "Verify Markers");
+                    return;
+                }
+                showAlert("Unexpected response: " + res, "Verify Markers");
+            });
+        }
+
+        function showVerifyResult(data) {
+            if (!data) {
+                showAlert("No data to display.", "Verify Markers");
+                return;
+            }
+            var lines = [];
+            var hasMismatch = !data.ok;
+            if (hasMismatch) {
+                lines.push("Mismatch:");
+            } else {
+                lines.push("OK:");
+            }
+            lines.push("Seq: " + (data.seq || ""));
+            lines.push("Flow: " + (data.flowPath || ""));
+            lines.push("Markers: " + (data.markerCount || 0) + " | Slots: " + (data.slotCount || 0));
+            var MAX_LINES = 15;
+            if (hasMismatch && data.mismatches && data.mismatches.length > 0) {
+                data.mismatches.forEach(function (m, idx) {
+                    if (lines.length >= MAX_LINES) return;
+                    if (m.type === "count") {
+                        lines.push("Count mismatch: markers " + m.markerCount + " vs slots " + m.slotCount);
+                    } else if (m.type === "frame") {
+                        lines.push("[" + m.index + "] frame: marker " + m.markerFrame + "f vs slot " + m.slotFrame + "f (Δ " + m.diff + ")");
+                    } else if (m.type === "name") {
+                        lines.push("[" + m.index + "] name: marker '" + m.markerName + "' vs slot '" + m.slotName + "'");
+                    }
+                });
+                if (data.mismatches.length + 4 > MAX_LINES) {
+                    lines.push("... +" + (data.mismatches.length - (MAX_LINES - 4)) + " more");
+                }
+            }
+
+            var buttons = [{ label: "Close", value: "close", variant: "primary" }];
+
+            showDialog({
+                title: "Verify Markers",
+                message: lines.join("\n"),
+                buttons: buttons
+            }).then(function (val) {
             });
         }
 
