@@ -40,6 +40,7 @@ $._ext.renderSelectedClips = function (payloadStr) {
         var clips = data.clips;
         var presetPath = data.presetPath;
         var outputFolder = data.outputFolder;
+        var deleteOutside = (data.deleteOutside === true); // optional payload override; default false
 
         // Validate
         if (!app.project || !app.project.activeSequence) {
@@ -83,6 +84,12 @@ $._ext.renderSelectedClips = function (payloadStr) {
             return fps;
         }
 
+        // Tick helpers
+        var TICKS_PER_SECOND = 254016000000;
+        function frameToTicks(frame, fps) {
+            return Math.round((frame / fps) * TICKS_PER_SECOND);
+        }
+
         // Helper: Sanitize filename
         function sanitizeName(name) {
             if (!name) return "clip";
@@ -115,18 +122,14 @@ $._ext.renderSelectedClips = function (payloadStr) {
             return suffix;
         }
 
-        function frameToTicks(frame, fps) {
-            return Math.round((frame / fps) * TICKS_PER_SECOND);
-        }
-
-        function isolateBranch(seq, fps, startFrame, endFrame, suffix) {
+        function isolateBranch(seqObj, fps, startFrame, endFrame, suffix) {
             var toggled = [];
             if (!suffix) return toggled;
             var startTicks = frameToTicks(startFrame, fps);
             var endTicks = frameToTicks(endFrame, fps);
-            var numTracks = (seq.videoTracks && seq.videoTracks.numTracks) ? seq.videoTracks.numTracks : 0;
+            var numTracks = (seqObj.videoTracks && seqObj.videoTracks.numTracks) ? seqObj.videoTracks.numTracks : 0;
             for (var vt = 0; vt < numTracks; vt++) {
-                var track = seq.videoTracks[vt];
+                var track = seqObj.videoTracks[vt];
                 if (!track || !track.clips) continue;
                 var numClips = track.clips.numItems || 0;
                 for (var ci = 0; ci < numClips; ci++) {
@@ -175,8 +178,84 @@ $._ext.renderSelectedClips = function (payloadStr) {
             }
         }
 
+        // === Clean helper (reuses 05_Clean_InOut logic, but non-interactive) ===
+        function shouldKeepClip(clip, inTicks, outTicks, margin) {
+            var clipStart = clip.start.ticks;
+            var clipEnd = clip.end.ticks;
+            return (clipEnd > (inTicks - margin)) && (clipStart < (outTicks + margin));
+        }
+
+        // Disable clips outside the render window (non-destructive); returns toggle history
+        // Hard delete clips outside the render window (destructive)
+        function cleanOutsideRange(seqObj, inTicks, outTicks, fps) {
+            var margin = Math.round(1 * TICKS_PER_SECOND / fps); // 1-frame margin
+            function removeOutside(track) {
+                if (!track || !track.clips) return;
+                for (var i = track.clips.numItems - 1; i >= 0; i--) {
+                    var clip = track.clips[i];
+                    if (!clip || !clip.start || !clip.end) continue;
+                    if (!shouldKeepClip(clip, inTicks, outTicks, margin)) {
+                        try { clip.remove(0, 1); } catch (eRem) { $.writeln("WARN cleanOutsideRange remove failed: " + eRem); }
+                    }
+                }
+            }
+            if (seqObj.videoTracks && seqObj.videoTracks.numTracks) {
+                for (var v = 0; v < seqObj.videoTracks.numTracks; v++) removeOutside(seqObj.videoTracks[v]);
+            }
+            if (seqObj.audioTracks && seqObj.audioTracks.numTracks) {
+                for (var a = 0; a < seqObj.audioTracks.numTracks; a++) removeOutside(seqObj.audioTracks[a]);
+            }
+        }
+
+        function disableOutsideRange(seqObj, inTicks, outTicks, fps) {
+            var margin = Math.round(1 * TICKS_PER_SECOND / fps); // 1-frame margin
+            var toggled = [];
+            if (seqObj.videoTracks && seqObj.videoTracks.numTracks) {
+                for (var i = 0; i < seqObj.videoTracks.numTracks; i++) {
+                    var vTrack = seqObj.videoTracks[i];
+                    if (!vTrack || !vTrack.clips) continue;
+                    for (var c = vTrack.clips.numItems - 1; c >= 0; c--) {
+                        var clip = vTrack.clips[c];
+                        if (!clip || !clip.start || !clip.end) continue;
+                        if (shouldKeepClip(clip, inTicks, outTicks, margin)) continue;
+                        try {
+                            var prev = (typeof clip.isVideoEnabled === "function")
+                                ? clip.isVideoEnabled()
+                                : (clip.disabled === true ? false : true);
+                            if (typeof clip.setVideoEnabled === "function") {
+                                clip.setVideoEnabled(false);
+                            } else {
+                                clip.disabled = true;
+                            }
+                            toggled.push({ clip: clip, wasEnabled: prev });
+                        } catch (eDis) {
+                            $.writeln("WARN disableOutsideRange failed: " + eDis);
+                        }
+                    }
+                }
+            }
+            return toggled;
+        }
+
+        function restoreClipEnables(toggled) {
+            if (!toggled) return;
+            for (var i = 0; i < toggled.length; i++) {
+                var entry = toggled[i];
+                var clip = entry.clip;
+                if (!clip) continue;
+                try {
+                    if (typeof clip.setVideoEnabled === "function") {
+                        clip.setVideoEnabled(entry.wasEnabled);
+                    } else {
+                        clip.disabled = !entry.wasEnabled;
+                    }
+                } catch (eRes) {
+                    $.writeln("WARN restoreClipEnables failed: " + eRes);
+                }
+            }
+        }
+
         var fps = getFPS(seq);
-        var TICKS_PER_SECOND = 254016000000;
         var jobs = 0;
         var errors = [];
 
@@ -200,31 +279,29 @@ $._ext.renderSelectedClips = function (payloadStr) {
                 continue;
             }
 
+            // Set In/Out on active sequence (Premiere only supports this on active seq)
+            var inTicks = frameToTicks(startFrame, fps);
+            var outTicks = frameToTicks(endFrame, fps);
+            try {
+                seq.setInPoint(inTicks.toString());
+                seq.setOutPoint(outTicks.toString());
+            } catch (eSetIO) {
+                errors.push("Failed to set In/Out for " + clipName + ": " + eSetIO);
+                continue;
+            }
+
+            var disabledOutside = null;
+            if (deleteOutside) {
+                cleanOutsideRange(seq, inTicks, outTicks, fps);
+            } else {
+                disabledOutside = disableOutsideRange(seq, inTicks, outTicks, fps);
+            }
+
+            // Optional branch isolation inside window
             var suffix = branchSuffix(clip.name || clipName);
             var toggled = isolateBranch(seq, fps, startFrame, endFrame, suffix);
 
             try {
-                // Convert frames to seconds
-                var inSec = startFrame / fps;
-                var outSec = endFrame / fps;
-
-                // Set In/Out points
-                try {
-                    seq.setInPoint(inSec);
-                    seq.setOutPoint(outSec);
-                } catch (e) {
-                    // Fallback to ticks if seconds don't work
-                    var inTicks = Math.round(inSec * TICKS_PER_SECOND);
-                    var outTicks = Math.round(outSec * TICKS_PER_SECOND);
-                    try {
-                        seq.setInPoint(inTicks.toString());
-                        seq.setOutPoint(outTicks.toString());
-                    } catch (e2) {
-                        errors.push("Failed to set In/Out for " + clipName + ": " + e2);
-                        continue;
-                    }
-                }
-
                 // Build output path
                 var seqName = seq.name || "sequence";
                 var fileName = seqName + "_" + clipName + ext;
@@ -257,11 +334,15 @@ $._ext.renderSelectedClips = function (payloadStr) {
                 }
             } finally {
                 restoreBranchState(toggled);
+                if (!deleteOutside) {
+                    restoreClipEnables(disabledOutside);
+                }
             }
         }
 
         // Build result message
         var msg = "Successfully queued " + jobs + " clip(s)";
+        msg += deleteOutside ? " (deleted outside range)" : " (disabled/restored outside range)";
         if (errors.length > 0) {
             msg += "\\n\\nErrors:\\n" + errors.join("\\n");
         }
