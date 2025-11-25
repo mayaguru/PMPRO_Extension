@@ -521,6 +521,7 @@
                     <div class="button-row" style="margin-top:8px;">
                         <button class="ghost-btn" id="refreshHealthBtn">Check Health</button>
                         <button class="ghost-btn" id="togglePreviewBtn">Toggle Preview</button>
+                        <button class="ghost-btn" id="resetShaderBtn" style="background:rgba(255,107,107,0.2);border-color:rgba(255,107,107,0.5);color:#ff6b6b;">Reset Shader</button>
                     </div>
                     <p style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:12px;" id="vrStatusMessage">
                         서버에 연결 중입니다...
@@ -726,6 +727,10 @@
                 if (!renderer.xr.isPresenting) {
                     controls.update();
                 }
+                // Ensure texture updates are applied before rendering
+                if (frameTexture && frameTexture.needsUpdate) {
+                    frameTexture.update();
+                }
                 renderer.render(scene, camera);
             });
         }
@@ -837,7 +842,14 @@
                         frameCanvas.height = bitmap.height;
                     }
                     frameCtx.drawImage(bitmap, 0, 0, frameCanvas.width, frameCanvas.height);
-                    frameTexture.needsUpdate = true;
+                    if (frameTexture) {
+                        // Force texture update - Three.js CanvasTexture needs explicit update
+                        frameTexture.needsUpdate = true;
+                        // Update the image source reference
+                        if (frameTexture.image !== frameCanvas) {
+                            frameTexture.image = frameCanvas;
+                        }
+                    }
                     statusMessage.textContent = "스트림 연결됨. VR 버튼을 눌러 감상하세요.";
                     setServerStatus("Server online", true);
                     updateNetworkIndicator(blob.size, performance.now() - start);
@@ -879,7 +891,14 @@
                         frameCanvas.height = miniPreview.naturalHeight;
                     }
                     frameCtx.drawImage(miniPreview, 0, 0, frameCanvas.width, frameCanvas.height);
-                    frameTexture.needsUpdate = true;
+                    if (frameTexture) {
+                        // Force texture update - Three.js CanvasTexture needs explicit update
+                        frameTexture.needsUpdate = true;
+                        // Update the image source reference
+                        if (frameTexture.image !== frameCanvas) {
+                            frameTexture.image = frameCanvas;
+                        }
+                    }
                 }
                 if (!state.useFrameEndpoint && state.streaming) {
                     requestAnimationFrame(pump);
@@ -988,6 +1007,76 @@
         });
 
         document.getElementById('refreshHealthBtn').addEventListener('click', refreshHealth);
+
+        document.getElementById('resetShaderBtn').addEventListener('click', () => {
+            log('Resetting shader and texture...');
+            statusMessage.textContent = "쉐이더 리셋 중...";
+            
+            try {
+                // Step 1: Ensure canvas has current frame content
+                // If canvas is empty, try to copy from preview
+                if (miniPreview.naturalWidth > 0 && miniPreview.naturalHeight > 0) {
+                    if (frameCanvas.width !== miniPreview.naturalWidth || frameCanvas.height !== miniPreview.naturalHeight) {
+                        frameCanvas.width = miniPreview.naturalWidth;
+                        frameCanvas.height = miniPreview.naturalHeight;
+                    }
+                    frameCtx.drawImage(miniPreview, 0, 0, frameCanvas.width, frameCanvas.height);
+                } else if (frameCanvas.width === 0 || frameCanvas.height === 0) {
+                    // Fallback: set default size and draw black
+                    frameCanvas.width = 1280;
+                    frameCanvas.height = 720;
+                    frameCtx.fillStyle = "#000";
+                    frameCtx.fillRect(0, 0, frameCanvas.width, frameCanvas.height);
+                }
+                
+                // Step 2: Force texture update (don't dispose, just update)
+                if (frameTexture) {
+                    // Force WebGL to recognize the update
+                    frameTexture.needsUpdate = true;
+                    // Update the source image data
+                    if (frameTexture.image) {
+                        frameTexture.image = frameCanvas;
+                    }
+                } else {
+                    // Only create if doesn't exist
+                    frameTexture = new THREE.CanvasTexture(frameCanvas);
+                    frameTexture.encoding = THREE.sRGBEncoding;
+                    frameTexture.minFilter = THREE.LinearFilter;
+                    frameTexture.magFilter = THREE.LinearFilter;
+                    frameTexture.anisotropy = 4;
+                    frameTexture.needsUpdate = true;
+                }
+                
+                // Step 3: Ensure all materials use the same texture reference
+                if (screenMaterial) {
+                    screenMaterial.map = frameTexture;
+                    screenMaterial.needsUpdate = true;
+                }
+                if (matLeft) {
+                    matLeft.map = frameTexture;
+                    matLeft.needsUpdate = true;
+                }
+                if (matRight) {
+                    matRight.map = frameTexture;
+                    matRight.needsUpdate = true;
+                }
+                
+                // Step 4: Rebuild screen (this will use the updated materials)
+                buildScreen();
+                
+                // Step 5: Force immediate render
+                renderer.clear();
+                renderer.render(scene, camera);
+                
+                log('Shader reset complete. Texture and materials refreshed.');
+                statusMessage.textContent = "쉐이더 리셋 완료. 텍스처가 갱신되었습니다.";
+                
+            } catch (err) {
+                log(`Shader reset error: ${err.message}`);
+                statusMessage.textContent = `리셋 오류: ${err.message}`;
+                console.error('Shader reset failed:', err);
+            }
+        });
 
         document.getElementById('recenterBtn').addEventListener('click', () => {
             camera.position.set(0, 1.6, screenState.distance);

@@ -20,10 +20,10 @@
     "fps": 30,
     "quality": 80,
     "region": {
-      "top": 166,
-      "left": 641,
-      "width": 2190,
-      "height": 1089
+      "top": 239,
+      "left": 606,
+      "width": 1280,
+      "height": 811
     },
     "aspectLock": false
   }

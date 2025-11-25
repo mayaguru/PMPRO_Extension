@@ -158,23 +158,37 @@ def monitors_summary_direct():
 
 def build_bbox(cfg, monitors):
     if not monitors:
+        print("WARNING: No monitors detected")
         return None
 
     monitor_index = int(cfg.get("monitor_index", 1))
     monitor_index = clamp(monitor_index, 0, len(monitors) - 1)
+    
+    if monitor_index >= len(monitors):
+        print(f"WARNING: monitor_index {monitor_index} out of range (max: {len(monitors)-1}), using 0")
+        monitor_index = 0
+    
     base_monitor = monitors[monitor_index]
+    
+    # Debug: Print monitor selection
+    if cfg.get("_debug_once"):
+        print(f"Selected monitor {monitor_index}: {base_monitor}")
+        print(f"Available monitors: {[(i, m.get('width'), m.get('height')) for i, m in enumerate(monitors)]}")
 
     mode = cfg.get("mode", "region")
     if mode not in ("region", "monitor"):
         mode = "region"
 
     if mode == "monitor":
-        return {
+        bbox = {
             "top": base_monitor["top"],
             "left": base_monitor["left"],
             "width": base_monitor["width"],
             "height": base_monitor["height"],
         }
+        if cfg.get("_debug_once"):
+            print(f"Monitor mode bbox: {bbox}")
+        return bbox
 
     region = cfg.get("region") or {}
     top = clamp(int(region.get("top", 0)), 0, max(0, base_monitor["height"] - 1))
@@ -185,12 +199,17 @@ def build_bbox(cfg, monitors):
     width = clamp(int(region.get("width", base_monitor["width"])), 1, max_width)
     height = clamp(int(region.get("height", base_monitor["height"])), 1, max_height)
 
-    return {
+    bbox = {
         "top": base_monitor["top"] + top,
         "left": base_monitor["left"] + left,
         "width": width,
         "height": height,
     }
+    
+    if cfg.get("_debug_once"):
+        print(f"Region mode bbox: {bbox} (relative: top={top}, left={left}, w={width}, h={height})")
+    
+    return bbox
 
 
 def apply_config(data):
@@ -266,13 +285,25 @@ def apply_config(data):
 def encode_frame_bytes(sct, cfg):
     bbox = build_bbox(cfg, sct.monitors)
     if not bbox:
+        print("WARNING: build_bbox returned None")
         return None, None
 
-    img = sct.grab(bbox)
-    img_pil = Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
-    frame_buffer = io.BytesIO()
-    img_pil.save(frame_buffer, format="JPEG", quality=cfg.get("quality", 80))
-    return frame_buffer.getvalue(), bbox
+    # Debug: Print capture info occasionally
+    import random
+    if random.random() < 0.01:  # ~1% of frames
+        print(f"Capture: monitor_index={cfg.get('monitor_index')}, mode={cfg.get('mode')}, bbox={bbox}")
+
+    try:
+        img = sct.grab(bbox)
+        img_pil = Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
+        frame_buffer = io.BytesIO()
+        img_pil.save(frame_buffer, format="JPEG", quality=cfg.get("quality", 80))
+        return frame_buffer.getvalue(), bbox
+    except Exception as e:
+        print(f"ERROR: Failed to capture frame: {e}")
+        print(f"  bbox: {bbox}")
+        print(f"  monitors: {[{'index': i, 'size': (m.get('width'), m.get('height'))} for i, m in enumerate(sct.monitors)]}")
+        return None, None
 
 
 def generate_mjpeg_stream():
@@ -308,8 +339,23 @@ def update_config():
     """API to update capture region from Premiere Panel."""
     if request.method == "OPTIONS":
         return ("", 204)
-    success, message, cfg = apply_config(request.json or {})
+    
+    data = request.json or {}
+    print(f"Received config update: {data}")
+    
+    # Add debug flag for first update
+    if "monitor_index" in data:
+        data["_debug_once"] = True
+    
+    success, message, cfg = apply_config(data)
+    
+    # Remove debug flag
+    if "_debug_once" in cfg:
+        del cfg["_debug_once"]
+    
     status = 200 if success else 400
+    print(f"Config update result: success={success}, message={message}, monitor_index={cfg.get('monitor_index')}")
+    
     return (
         {
             "status": "success" if success else "error",
@@ -379,9 +425,27 @@ def add_cors_headers(response):
 
 
 if __name__ == "__main__":
-    start_background_thread()
-    print("Starting VR Streamer...")
+    # Print monitor information at startup
+    print("=" * 60)
+    print("VR Streamer Starting...")
+    print("=" * 60)
+    
+    with mss.mss() as sct:
+        print(f"Detected {len(sct.monitors)} monitor(s):")
+        for idx, mon in enumerate(sct.monitors):
+            label = "Virtual desktop (all displays)" if idx == 0 else f"Monitor {idx}"
+            print(f"  [{idx}] {label}: {mon.get('width')}x{mon.get('height')} at ({mon.get('left')}, {mon.get('top')})")
+    
+    print("=" * 60)
+    print("Monitor Index Guide:")
+    print("  0 = Virtual desktop (all displays combined)")
+    print("  1 = Primary monitor (first physical monitor)")
+    print("  2+ = Additional monitors")
+    print("=" * 60)
     print("1. Ensure your VR headset is on the SAME Wi-Fi.")
     print("2. Find your PC's IP address (automatically shown in the panel).")
     print("3. Open http://<YOUR_PC_IP>:5000 in the VR browser.")
+    print("=" * 60)
+    
+    start_background_thread()
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

@@ -1747,43 +1747,107 @@
                 if (!mon || !mon.width || !mon.height) {
                     return;
                 }
-                var region = {
-                    left: Math.round(cropOverlayRect.x * mon.width),
-                    top: Math.round(cropOverlayRect.y * mon.height),
-                    width: Math.round(cropOverlayRect.width * mon.width),
-                    height: Math.round(cropOverlayRect.height * mon.height)
+                
+                // Get the actual preview image element to determine its displayed size
+                var previewImg = vrEls.previewImage && vrEls.previewImage.length ? vrEls.previewImage[0] : null;
+                var previewDisplayEl = previewImg ? previewImg.closest('.vr-preview-display') : null;
+                
+                // Get the actual displayed size of the preview image
+                var previewDisplayWidth = previewDisplayEl ? previewDisplayEl.clientWidth : mon.width;
+                var previewDisplayHeight = previewDisplayEl ? previewDisplayEl.clientHeight : mon.height;
+                
+                // The crop overlay rect is normalized (0-1) relative to the preview display
+                // We need to convert it to actual pixel coordinates within the preview
+                var cropPixels = {
+                    left: Math.round(cropOverlayRect.x * previewDisplayWidth),
+                    top: Math.round(cropOverlayRect.y * previewDisplayHeight),
+                    width: Math.round(cropOverlayRect.width * previewDisplayWidth),
+                    height: Math.round(cropOverlayRect.height * previewDisplayHeight)
                 };
+                
+                // Now we need to map these preview pixels to monitor pixels
+                // The preview image shows the captured region, so we need to scale based on
+                // the actual captured region size vs preview display size
+                var capturedRegion = currentVrConfig.region || {};
+                var capturedWidth = parseInt(capturedRegion.width, 10) || mon.width;
+                var capturedHeight = parseInt(capturedRegion.height, 10) || mon.height;
+                
+                // Calculate scale factor: how many monitor pixels per preview pixel
+                var scaleX = capturedWidth / previewDisplayWidth;
+                var scaleY = capturedHeight / previewDisplayHeight;
+                
+                // Convert crop pixels to monitor pixels
+                var region = {
+                    left: Math.round(capturedRegion.left || 0) + Math.round(cropPixels.left * scaleX),
+                    top: Math.round(capturedRegion.top || 0) + Math.round(cropPixels.top * scaleY),
+                    width: Math.round(cropPixels.width * scaleX),
+                    height: Math.round(cropPixels.height * scaleY)
+                };
+                
+                // Ensure values are within bounds
                 region.left = clamp(region.left, 0, Math.max(0, mon.width - 1));
                 region.top = clamp(region.top, 0, Math.max(0, mon.height - 1));
-                if (region.left + region.width > mon.width) {
-                    region.width = mon.width - region.left;
-                }
-                if (region.top + region.height > mon.height) {
-                    region.height = mon.height - region.top;
-                }
-                region.width = Math.max(region.width, 1);
-                region.height = Math.max(region.height, 1);
+                
+                // Clamp width/height to fit within monitor bounds
+                var maxWidth = mon.width - region.left;
+                var maxHeight = mon.height - region.top;
+                region.width = clamp(region.width, 1, maxWidth);
+                region.height = clamp(region.height, 1, maxHeight);
+                
+                // Apply aspect lock if enabled (2:1 for SBS)
                 if (currentVrConfig.aspectLock) {
-                    region.height = Math.round(region.width / 2);
-                    if (region.top + region.height > mon.height) {
-                        region.height = mon.height - region.top;
-                        region.width = Math.round(region.height * 2);
+                    var targetRatio = 2.0; // width:height = 2:1
+                    var currentRatio = region.width / region.height;
+                    
+                    if (currentRatio > targetRatio) {
+                        // Too wide, adjust height
+                        region.height = Math.round(region.width / targetRatio);
+                        if (region.top + region.height > mon.height) {
+                            region.height = mon.height - region.top;
+                            region.width = Math.round(region.height * targetRatio);
+                            if (region.left + region.width > mon.width) {
+                                region.width = mon.width - region.left;
+                                region.height = Math.round(region.width / targetRatio);
+                            }
+                        }
+                    } else {
+                        // Too tall, adjust width
+                        region.width = Math.round(region.height * targetRatio);
                         if (region.left + region.width > mon.width) {
                             region.width = mon.width - region.left;
-                            region.height = Math.round(region.width / 2);
+                            region.height = Math.round(region.width / targetRatio);
+                            if (region.top + region.height > mon.height) {
+                                region.height = mon.height - region.top;
+                                region.width = Math.round(region.height * targetRatio);
+                            }
                         }
                     }
+                    
+                    // Ensure minimum size
+                    region.width = Math.max(region.width, 1);
+                    region.height = Math.max(region.height, 1);
                 }
+                
                 currentVrConfig.region.top = region.top;
                 currentVrConfig.region.left = region.left;
                 currentVrConfig.region.width = region.width;
                 currentVrConfig.region.height = region.height;
+                
                 if (syncInputs) {
                     updateRegionInputsFromCurrent();
                 }
                 if (commit) {
+                    // Always send to server when committing crop changes
                     if (sanitizeVrUrl(currentVrConfig.serverUrl)) {
+                        console.log("Committing crop region to server:", {
+                            top: region.top,
+                            left: region.left,
+                            width: region.width,
+                            height: region.height
+                        });
                         sendVrConfigToServer();
+                    } else {
+                        console.warn("Cannot send crop to server: server URL not set");
                     }
                 }
             }
@@ -1829,18 +1893,31 @@
             function handleCropPointerMove(evt) {
                 if (!cropDragState.active) return;
                 evt.preventDefault();
+                
+                // Get current container rect (may have changed)
+                var currentContainerRect = vrCropOverlayEl.getBoundingClientRect();
+                
+                // Calculate pixel movement from start position
+                var pixelDx = evt.clientX - cropDragState.startX;
+                var pixelDy = evt.clientY - cropDragState.startY;
+                
+                // Normalize to container size (0-1 range) - use current container size
                 var dx = 0;
                 var dy = 0;
-                if (cropDragState.containerRect.width > 0) {
-                    dx = (evt.clientX - cropDragState.startX) / cropDragState.containerRect.width;
+                if (currentContainerRect.width > 0) {
+                    dx = pixelDx / currentContainerRect.width;
                 }
-                if (cropDragState.containerRect.height > 0) {
-                    dy = (evt.clientY - cropDragState.startY) / cropDragState.containerRect.height;
+                if (currentContainerRect.height > 0) {
+                    dy = pixelDy / currentContainerRect.height;
                 }
+                
+                // Apply delta from the original start rect (not accumulated)
                 var next = applyCropDragDelta(cropDragState.startRect, cropDragState.mode, dx, dy);
                 cropOverlayRect = next;
                 renderCropSelection();
-                applyOverlayRectToConfig(false, true);
+                
+                // Don't update config during drag - only update visual feedback
+                // This prevents double conversion issues
             }
 
             function handleCropPointerUp() {
@@ -1848,7 +1925,14 @@
                 document.removeEventListener("pointermove", handleCropPointerMove);
                 document.removeEventListener("pointerup", handleCropPointerUp);
                 cropDragState.active = false;
+                
+                // Apply final rect to config with precise calculation
+                // Don't call updateCropOverlayFromConfig() here - it causes double conversion
+                // The cropOverlayRect is already correct from the drag, just convert it to config
                 applyOverlayRectToConfig(true, true);
+                
+                // Force preview refresh to show updated crop
+                refreshVrPreview();
             }
 
             function attachCropOverlayEvents() {
@@ -2010,18 +2094,30 @@
                 if (vrEls.configStatus) {
                     vrEls.configStatus.text("Sending settings to server...");
                 }
+                
+                // Ensure monitorIndex is properly set and valid
+                var monitorIndex = parseInt(currentVrConfig.monitorIndex, 10);
+                if (isNaN(monitorIndex) || monitorIndex < 0) {
+                    monitorIndex = 1; // Default to primary monitor (index 1)
+                    currentVrConfig.monitorIndex = monitorIndex;
+                    console.warn("Invalid monitorIndex, defaulting to 1");
+                }
+                
                 var payload = {
-                    monitor_index: currentVrConfig.monitorIndex,
-                    mode: currentVrConfig.mode,
-                    fps: currentVrConfig.fps,
-                    quality: currentVrConfig.quality,
+                    monitor_index: monitorIndex,
+                    mode: currentVrConfig.mode || "region",
+                    fps: parseInt(currentVrConfig.fps, 10) || 30,
+                    quality: parseInt(currentVrConfig.quality, 10) || 80,
                     region: {
-                        top: currentVrConfig.region.top,
-                        left: currentVrConfig.region.left,
-                        width: currentVrConfig.region.width,
-                        height: currentVrConfig.region.height
+                        top: parseInt(currentVrConfig.region.top, 10) || 0,
+                        left: parseInt(currentVrConfig.region.left, 10) || 0,
+                        width: parseInt(currentVrConfig.region.width, 10) || 1280,
+                        height: parseInt(currentVrConfig.region.height, 10) || 720
                     }
                 };
+                
+                console.log("Sending VR config to server:", payload);
+                
                 fetch(endpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -2031,13 +2127,19 @@
                         throw new Error("HTTP " + res.status);
                     }
                     return res.json();
-                }).then(function () {
+                }).then(function (resp) {
+                    console.log("VR config update response:", resp);
                     if (vrEls.configStatus) {
                         vrEls.configStatus.text("Applied at " + new Date().toLocaleTimeString());
+                    }
+                    // Update monitor options if server returned monitor list
+                    if (resp && resp.monitors && resp.monitors.length) {
+                        updateMonitorOptions(resp.monitors);
                     }
                     refreshVrPreview();
                     return pingVrServer();
                 }).catch(function (err) {
+                    console.error("VR config update failed:", err);
                     if (vrEls.configStatus) {
                         vrEls.configStatus.text("Failed to send settings: " + err.message);
                     }
@@ -2180,7 +2282,14 @@
                 currentVrConfig.mode = (vrEls.modeSelect.val() === "monitor") ? "monitor" : "region";
                 currentVrConfig.fps = readNumberValue(vrEls.fpsInput, defaultVrConfig.fps, 1);
                 currentVrConfig.quality = readNumberValue(vrEls.qualityInput, defaultVrConfig.quality, 10);
-                currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                
+                // Ensure monitorIndex is valid (default to 1 for primary monitor)
+                var monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                if (monitorIndex < 0) {
+                    monitorIndex = 1; // Primary monitor
+                }
+                currentVrConfig.monitorIndex = monitorIndex;
+                
                 currentVrConfig.aspectLock = vrEls.aspectLock ? vrEls.aspectLock.is(":checked") : currentVrConfig.aspectLock;
                 persistVrConfig();
                 updateVrInputs();
@@ -2194,7 +2303,16 @@
                 currentVrConfig.region.left = readNumberValue(vrEls.leftInput, currentVrConfig.region.left, 0);
                 currentVrConfig.region.width = readNumberValue(vrEls.widthInput, currentVrConfig.region.width, 1);
                 currentVrConfig.region.height = readNumberValue(vrEls.heightInput, currentVrConfig.region.height, 1);
-                currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                
+                // Ensure monitorIndex is valid (default to 1 for primary monitor)
+                var monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                if (monitorIndex < 0 || isNaN(monitorIndex)) {
+                    monitorIndex = 1; // Primary monitor (MSS index 1 = first physical monitor)
+                    console.warn("Invalid monitorIndex, defaulting to 1 (primary monitor)");
+                }
+                currentVrConfig.monitorIndex = monitorIndex;
+                console.log("Monitor index set to:", monitorIndex);
+                
                 currentVrConfig.aspectLock = vrEls.aspectLock ? vrEls.aspectLock.is(":checked") : currentVrConfig.aspectLock;
                 updateCropOverlayFromConfig();
                 persistVrConfig();
@@ -2219,8 +2337,17 @@
             }
             if (vrEls.monitorSelect && vrEls.monitorSelect.length) {
                 vrEls.monitorSelect.on("change", function () {
-                    currentVrConfig.monitorIndex = readNumberValue(vrEls.monitorSelect, currentVrConfig.monitorIndex, 0);
+                    var selectedValue = vrEls.monitorSelect.val();
+                    var monitorIndex = parseInt(selectedValue, 10);
+                    if (isNaN(monitorIndex) || monitorIndex < 0) {
+                        monitorIndex = 1; // Default to primary monitor (index 1)
+                        console.warn("Invalid monitor selection, defaulting to 1");
+                    }
+                    currentVrConfig.monitorIndex = monitorIndex;
+                    console.log("Monitor selection changed to:", monitorIndex);
                     updateCropOverlayFromConfig();
+                    persistVrConfig();
+                    sendVrConfigToServer();
                 });
             }
             if (vrEls.aspectLock && vrEls.aspectLock.length) {
